@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>VietSky - Đặt Vé Máy Bay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/client.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+    <div class="logo">Viet<span>Sky</span></div>
+    
+    <div class="server-selector">
+        <label for="serverSelect">Kết nối tới Trạm:</label>
+        <select id="serverSelect" onchange="changeServer(this.value)">
+            </select>
+    </div>
+
+    <div class="connection-info">
+        <div class="station-tag">
+            <span class="dot"></span>
+            Máy chủ hiện tại: <strong id="currentIpDisplay" th:text="${serverIp}">192.168.1.x</strong>
+        </div>
+        <div class="id-tag">
+            ID: <span th:text="${serverId}">Server-01</span>
+        </div>
+    </div>
+</nav>
+
+    <div class="hero-section">
+        <h1>Khám phá thế giới cùng VietSky</h1>
+        <p>Hệ thống đặt vé phân tán thời gian thực</p>
+    </div>
+
+    <div class="booking-card">
+        <div class="search-form">
+            <div class="input-group">
+                <label>Họ và tên</label>
+                <input type="text" id="passengerName" placeholder="Nhập tên của bạn...">
+            </div>
+            <div class="input-group">
+                <label>Chuyến bay</label>
+                <select id="flightId">
+                    <option value="VN123">VN123 - Đà Nẵng (DAD) ➔ Hà Nội (HAN)</option>
+                    <option value="VJ456">VJ456 - Đà Nẵng (DAD) ➔ TP.HCM (SGN)</option>
+                    <option value="QH789">QH789 - Đà Nẵng (DAD) ➔ Phú Quốc (PQC)</option>
+                </select>
+            </div>
+            <button class="btn-book" onclick="confirmBooking()">Đặt vé ngay</button>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Đang xử lý đặt vé...</div>
+
+    <script>
+        async function confirmBooking() {
+            const name = document.getElementById('passengerName').value;
+            const flight = document.getElementById('flightId').value;
+            
+            if(!name) { alert("Vui lòng nhập tên!"); return; }
+
+            const toast = document.getElementById('toast');
+            toast.innerText = "🚀 Đang gửi yêu cầu tới hệ thống phân tán...";
+            toast.classList.add('show');
+
+            try {
+                // Gọi API tới server hiện tại
+                const response = await fetch(`/api/booking?flightId=${flight}&userId=${name}`, { method: 'POST' });
+                const result = await response.text();
+                
+                toast.innerText = "✅ " + result;
+                setTimeout(() => toast.classList.remove('show'), 5000);
+            } catch (error) {
+                toast.innerText = "❌ Lỗi kết nối server!";
+            }
+        }
+    </script>
+</body>
+</html>
