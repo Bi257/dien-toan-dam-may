@@ -3,12 +3,16 @@
 <head>
     <title>Distributed System Monitor - Neon NOC</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    
     <style>
         :root {
             --bg-color: #020617;
-            --primary-neon: #00ffff; /* Electric Blue */
-            --secondary-neon: #ff00ff; /* Magenta for Sync */
-            --error-neon: #ff3131; /* Red for Error/Offline */
+            --primary-neon: #00ffff;
+            --secondary-neon: #ff00ff;
+            --error-neon: #ff3131;
             --text-color: #f0f9ff;
         }
 
@@ -16,276 +20,155 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: 'Orbitron', sans-serif;
-            margin: 0;
-            padding: 20px;
-            overflow: hidden; /* Giữ sơ đồ cố định */
-            display: flex;
-            height: 100vh;
+            margin: 0; padding: 20px;
+            overflow: hidden; display: flex; height: 100vh;
         }
 
-        /* --- PHẦN 1: TỔNG THỂ LAYOUT --- */
-        #main-container {
-            display: flex;
-            width: 100%;
-            height: 100%;
-            gap: 20px;
-        }
+        #main-container { display: flex; width: 100%; height: 100%; gap: 20px; }
 
-        /* --- PHẦN 2: NETWORK VISUALIZER (BÊN TRÁI) --- */
         #visualizer-panel {
-            flex: 1; /* Chiếm 50% chiều rộng */
-            background: rgba(0, 255, 255, 0.03);
-            border: 2px solid var(--primary-neon);
-            border-radius: 12px;
+            flex: 1.5; background: rgba(0, 255, 255, 0.03);
+            border: 2px solid var(--primary-neon); border-radius: 12px;
             box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
+            position: relative; display: flex; flex-direction: column; padding: 20px;
         }
 
-        #visualizer-header {
-            color: var(--primary-neon);
-            text-shadow: 0 0 10px var(--primary-neon);
-            font-size: 1.5em;
-            margin-bottom: 20px;
-            text-align: center;
-        }
+        #network-canvas { width: 100%; height: 100%; }
 
-        #network-canvas {
-            width: 100%;
-            height: 100%;
-            /* Canvas sẽ được vẽ bằng JS */
-        }
-
-        /* --- PHẦN 3: LOG CONSOLE (BÊN PHẢI) --- */
-        #log-panel {
-            flex: 1; /* Chiếm 50% chiều rộng */
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
+        #log-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; }
 
         .server-header {
-            border: 1px solid var(--primary-neon);
-            padding: 15px;
-            border-radius: 8px;
-            background: rgba(0, 255, 255, 0.05);
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
-        }
-
-        .server-header h1 {
-            color: var(--primary-neon);
-            text-shadow: 0 0 15px var(--primary-neon);
-            margin: 0;
-            font-size: 1.8em;
-        }
-
-        .status-bar {
-            font-family: 'VT323', monospace;
-            font-size: 1.2em;
-            color: #888;
-            margin-top: 5px;
+            border: 1px solid var(--primary-neon); padding: 15px;
+            border-radius: 8px; background: rgba(0, 255, 255, 0.05);
         }
 
         #log-container {
-            flex: 1;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 15px;
-            overflow-y: auto;
-            font-family: 'VT323', monospace;
-            font-size: 1.1em;
-            display: flex;
-            flex-direction: column-reverse; /* Log mới nhất ở trên cùng */
+            flex: 1; background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #333; border-radius: 8px;
+            padding: 15px; overflow-y: auto;
+            font-family: 'VT323', monospace; font-size: 1.2em;
+            display: flex; flex-direction: column-reverse;
         }
 
-        .log-entry { margin: 4px 0; line-height: 1.4; }
-        .log-time { color: #666; }
-        .log-type-booking { color: var(--primary-neon); text-shadow: 0 0 5px var(--primary-neon); }
-        .log-type-sync { color: var(--secondary-neon); text-shadow: 0 0 5px var(--secondary-neon); }
-        .log-type-error { color: var(--error-neon); text-shadow: 0 0 5px var(--error-neon); font-weight: bold;}
-        .log-message { color: var(--text-color); }
-
+        .log-entry { margin: 5px 0; border-bottom: 1px dashed #222; padding-bottom: 5px; }
+        .log-type-booking { color: var(--primary-neon); }
+        .log-type-sync { color: var(--secondary-neon); }
+        .log-type-error { color: var(--error-neon); font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="main-container">
     <div id="visualizer-panel">
-        <div id="visualizer-header">NETWORK TOPOLOGY VISUALIZER</div>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+        <div style="color:var(--primary-neon); text-align:center; font-size:1.5em; margin-bottom:10px;">NETWORK TOPOLOGY VISUALIZER</div>
         <div id="network-canvas"></div>
     </div>
 
     <div id="log-panel">
         <div class="server-header">
             <h1 th:text="'NODE: ' + ${serverId}">Server-Duong</h1>
-            <div class="status-bar">
+            <div style="font-family:'VT323'; color:#888;">
                 Status: <span style="color: #0f0;">ONLINE</span> | 
-                Lamport Clock: <span id="lamport-clock">0</span> |
+                Clock: <span id="lamport-clock" style="color:var(--primary-neon)">0</span> |
                 Peers: <span id="peer-count">0</span>/4
             </div>
         </div>
         <div id="log-container">
-            <div class="log-entry log-type-booking">
-                <span class="log-time">[11:45:01]</span>
-                <span class="log-message">System Initialized. Awaiting peers...</span>
-            </div>
+            <div class="log-entry" style="color:#666;">[System] Awaiting WebSocket connection...</div>
         </div>
     </div>
 </div>
 
-<script>
-    // --- CẤU HÌNH HỆ THỐNG ---
-    const myServerId = "[[${serverId}]]"; // Lấy từ Backend
-    const peerLinks = "[[${peerServers}]]".split(',').filter(p => p); // Danh sách link bạn bè
+<script th:inline="javascript">
+    const myServerId = /*[[${serverId}]]*/ 'Cloud-Server-Duong';
+    const peerLinks = /*[[${peerServers}]]*/ []; 
+    const neonColor = "#00ffff";
+    const syncColor = "#ff00ff";
 
-    // --- 1. KHỞI TẠO SƠ ĐỒ MẠNG (CYTOSCAPE) ---
+    // --- 1. KHỞI TẠO CYTOSCAPE ---
     const cy = cytoscape({
         container: document.getElementById('network-canvas'),
-        userZoomingEnabled: false, // Khóa zoom
-        userPanningEnabled: false, // Khóa kéo
         style: [
             {
                 selector: 'node',
                 style: {
-                    'background-color': '#020617', // Tối để lộ viền Neon
-                    'border-color': var(--primary-neon),
+                    'background-color': '#020617',
+                    'border-color': neonColor,
                     'border-width': 2,
                     'label': 'data(label)',
-                    'color': var(--text-color),
-                    'font-family': 'Orbitron',
-                    'font-size': '12px',
-                    'text-valign': 'center',
-                    'text-halign': 'center',
-                    'width': '60px',
-                    'height': '60px',
-                    // Hiệu ứng phát sáng Neon cho Node
-                    'box-shadow': '0 0 15px ' + var(--primary-neon)
+                    'color': '#fff',
+                    'width': '50px', 'height': '50px',
+                    'font-size': '10px', 'text-valign': 'center'
                 }
             },
             {
-                selector: 'edge', // Đường kết nối
-                style: {
-                    'width': 2,
-                    'line-color': '#333', // Màu tối khi im lặng
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'triangle',
-                    'target-arrow-color': '#333'
-                }
+                selector: 'edge',
+                style: { 'width': 2, 'line-color': '#333', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' }
             },
             {
-                selector: '.active-edge', // Khi đang truyền tin
-                style: {
-                    'line-color': var(--secondary-neon),
-                    'target-arrow-color': var(--secondary-neon),
-                    'width': 3,
-                    'line-dash-pattern': [6, 3], // Đường đứt nét chạy
-                    'line-dash-offset': 24,
-                    'animation': 'dash 1s linear infinite'
-                }
-            },
-            {
-                selector: '.offline-node', // Khi node sập
-                style: {
-                    'border-color': var(--error-neon),
-                    'color': var(--error-neon),
-                    'box-shadow': '0 0 15px ' + var(--error-neon)
-                }
+                selector: '.active-edge',
+                style: { 'line-color': syncColor, 'width': 4, 'target-arrow-color': syncColor }
             }
         ],
-        elements: [] // Sẽ thêm qua JS
+        elements: []
     });
 
-    // --- 2. TẠO CÁC NODE (DƯƠNG + 4 BẠN) ---
+    // --- 2. TẠO NODE ---
     function initNetworkNodes() {
-        // Thêm máy của Dương (Nằm giữa)
-        cy.add({ data: { id: 'me', label: myServerId.split('-')[1] || 'Me' }, position: { x: 300, y: 300 } });
-
-        // Thêm 4 máy bạn bè (Xếp vòng tròn xung quanh)
-        const radius = 150;
-        for (let i = 0; i < 4; i++) {
-            const angle = (i / 4) * Math.PI * 2;
-            const x = 300 + radius * Math.cos(angle);
-            const y = 300 + radius * Math.sin(angle);
-            
-            const peerId = `peer_${i}`;
-            const label = peerLinks[i] ? peerLinks[i].split('//')[1].split('.')[0] : `Peer ${i+1}`;
-
-            cy.add({ data: { id: peerId, label: label, url: peerLinks[i] }, position: { x, y } });
-            // Tạo đường kết nối từ Dương sang các bạn
-            cy.add({ data: { id: `edge_${i}`, source: 'me', target: peerId } });
-        }
+        cy.add({ data: { id: 'me', label: 'ME (' + myServerId + ')' }, position: { x: 300, y: 250 } });
         
-        document.getElementById('peer-count').innerText = peerLinks.length;
+        let peers = Array.isArray(peerLinks) ? peerLinks : peerLinks.split(',').filter(p => p);
+        peers.forEach((link, i) => {
+            const angle = (i / peers.length) * Math.PI * 2;
+            const x = 300 + 150 * Math.cos(angle);
+            const y = 250 + 150 * Math.sin(angle);
+            const peerId = 'peer_' + i;
+            cy.add({ data: { id: peerId, label: 'Node ' + (i+1) } , position: { x, y } });
+            cy.add({ data: { id: 'edge_' + i, source: 'me', target: peerId } });
+        });
+        document.getElementById('peer-count').innerText = peers.length;
     }
 
-    // --- 3. HIỆU ỨNG TRỰC QUAN HÓA LUỒNG ---
-    function visualizeSyncFlow(direction, targetPeerUrl = null) {
-        if (direction === 'broadcast') {
-            // Hiệu ứng xung điện từ máy Dương sang TẤT CẢ các bạn
-            cy.edges().addClass('active-edge');
-            setTimeout(() => cy.edges().removeClass('active-edge'), 1500); // 1.5s tắt
-        } else if (direction === 'receive') {
-            // (Nâng cấp sau: Nếu biết ai gửi thì làm hiệu ứng ngược lại)
-        }
-    }
-
-    // --- 4. KẾT NỐI WEBSOCKET (ĐỂ NHẬN LOG THỜI GIAN THỰC) ---
-    // (Dương nhớ thêm thư viện SockJS và Stomp vào project nếu chưa có nhé)
+    // --- 3. KẾT NỐI WEBSOCKET ---
     function connectWebSocket() {
         const socket = new SockJS('/ws-log');
         const stompClient = Stomp.over(socket);
+        
+        // Tắt log loằng ngoằng của Stomp trong Console
+        stompClient.debug = null;
+
         stompClient.connect({}, function (frame) {
-            console.log('Connected: ' + frame);
+            console.log('Connected to WebSocket!');
             stompClient.subscribe('/topic/logs/' + myServerId, function (logDto) {
                 addLogEntry(JSON.parse(logDto.body));
             });
+        }, function(error) {
+            console.error('WebSocket Error: ', error);
+            setTimeout(connectWebSocket, 5000); // Thử kết nối lại sau 5s nếu lỗi
         });
     }
 
     function addLogEntry(log) {
         const container = document.getElementById('log-container');
-        const timeStr = new Date().toLocaleTimeString('vi-VN');
+        const timeStr = new Date().toLocaleTimeString();
+        let typeClass = 'log-type-' + (log.type || 'info').toLowerCase();
         
-        let typeClass = '';
         if (log.type === 'BOOKING') {
-            typeClass = 'log-type-booking';
-            visualizeSyncFlow('broadcast'); // Kích hoạt hiệu ứng bắn tia sáng
-        } else if (log.type === 'SYNC') {
-            typeClass = 'log-type-sync';
-        } else if (log.type === 'ERROR') {
-            typeClass = 'log-type-error';
+            cy.edges().addClass('active-edge');
+            setTimeout(() => cy.edges().removeClass('active-edge'), 1000);
         }
 
-        const html = `
-            <div class="log-entry ${typeClass}">
-                <span class="log-time">[${timeStr}]</span>
-                <span class="log-message">${log.message}</span>
-            </div>
-        `;
-        container.insertAdjacentHTML('afterbegin', html); // Thêm lên đầu
-        
-        // Cập nhật đồng hồ Lamport trên Dashboard
-        if (log.lamportClock) {
-            document.getElementById('lamport-clock').innerText = log.lamportClock;
-        }
+        const html = `<div class="log-entry ${typeClass}">
+            <span style="color:#666">[${timeStr}]</span> <b>${log.type}:</b> ${log.message}
+        </div>`;
+        container.insertAdjacentHTML('afterbegin', html);
+        if (log.lamportClock) document.getElementById('lamport-clock').innerText = log.lamportClock;
     }
 
-    // --- 5. KHỞI CHẠY ---
     window.onload = function() {
         initNetworkNodes();
-        connectWebSocket(); // Phải có Backend WebSocket mới chạy thực được
-        
-        // Test hiệu ứng bằng cách click chuột (Dương xóa dòng này khi báo cáo)
-        cy.on('tap', 'node', function(){
-             addLogEntry({type: 'BOOKING', message: 'Test Đặt vé từ UI (Nhấn Node)', lamportClock: 99});
-        });
+        connectWebSocket();
     };
-
 </script>
 </body>
 </html>
