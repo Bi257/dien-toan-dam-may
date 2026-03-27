@@ -2,128 +2,115 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title>Distributed System Control Panel</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline';">
+    
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    
     <style>
         :root { --bg: #0a0a0a; --neon-blue: #00f2ff; --neon-green: #39ff14; --terminal-text: #00ff41; --border: #1a1a1a; }
         body { background: var(--bg); color: #fff; font-family: 'Fira Code', monospace; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        /* Sidebar */
         #sidebar { width: 220px; background: #000; border-right: 1px solid var(--border); padding: 15px; z-index: 10; }
         .nav-title { font-family: 'Orbitron'; font-size: 0.8rem; color: #666; margin-bottom: 15px; letter-spacing: 2px; }
         .node-btn { width: 100%; padding: 12px; margin-bottom: 8px; background: #111; border: 1px solid #333; color: #888; cursor: pointer; text-align: left; transition: 0.3s; font-family: 'Fira Code'; }
         .node-btn:hover { border-color: var(--neon-blue); color: #fff; }
         .node-btn.active { border-left: 4px solid var(--neon-blue); background: #1a1a1a; color: var(--neon-blue); }
-
-        /* Main Area */
         #main { flex: 1; display: flex; flex-direction: column; }
         #top-half { height: 45%; border-bottom: 1px solid var(--border); position: relative; }
         #bottom-half { height: 55%; background: #000; display: flex; flex-direction: column; }
-
-        /* Terminal Style */
         .terminal-header { background: #1a1a1a; padding: 8px 15px; font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
         #console { flex: 1; padding: 15px; overflow-y: auto; font-size: 0.9rem; line-height: 1.5; color: var(--terminal-text); }
         .log-line { margin: 2px 0; display: flex; gap: 10px; }
         .time { color: #555; min-width: 85px; }
         .tag { font-weight: bold; min-width: 100px; }
         .tag-system { color: #fff; }
-        .tag-lamport { color: #eab308; } /* Vàng */
-        .tag-db { color: #3b82f6; }      /* Xanh dương */
-        .tag-network { color: #a855f7; } /* Tím */
+        .tag-lamport { color: #eab308; }
+        .tag-db { color: #3b82f6; }
         .tag-booking { color: var(--neon-green); }
-
-        /* Visualizer */
         #cy { width: 100%; height: 100%; }
-        .status-bar { position: absolute; top: 10px; left: 10px; font-size: 0.7rem; background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #333; border-radius: 5px; }
+        .status-box { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); border: 1px solid var(--neon-blue); padding: 10px; border-radius: 4px; font-size: 0.8rem; z-index: 5; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div class="nav-title">TOPOLOGY VIEW</div>
+    <div class="nav-title">CONTROL CENTER</div>
     <button class="node-btn active" onclick="setFilter('ALL', this)">[ ALL NODES ]</button>
     <button class="node-btn" th:onclick="setFilter([[${serverId}]], this)">[ MY NODE ]</button>
-    <div class="nav-title" style="margin-top: 20px;">REMOTE PEERS</div>
-    <div id="peer-list"></div>
 </div>
 
 <div id="main">
     <div id="top-half">
-        <div class="status-bar">
-            NODE ID: <span th:text="${serverId}" style="color: var(--neon-blue)"></span><br>
-            STATUS: <span style="color: var(--neon-green)">ONLINE</span><br>
-            CLOCK: <span id="master-clock" style="color: var(--neon-blue)">0</span>
+        <div class="status-box">
+            NODE ID: <span th:text="${serverId}" style="color:var(--neon-blue)"></span><br>
+            STATUS: <span id="ws-status" style="color:red">DISCONNECTED</span><br>
+            CLOCK: <span id="master-clock" style="color:var(--neon-blue)">0</span>
         </div>
         <div id="cy"></div>
     </div>
-
     <div id="bottom-half">
         <div class="terminal-header">
-            <span>SERVER CONTROL PANEL - LOG OUTPUT</span>
+            <span>REAL-TIME SERVER LOGS</span>
             <span id="filter-label">VIEWING: ALL</span>
         </div>
-        <div id="console">
-            </div>
+        <div id="console"></div>
     </div>
 </div>
 
 <script th:inline="javascript">
-    const myId = [[${serverId}]];
-    const rawPeers = [[${peerServers}]];
+    /*<![CDATA[*/
+    // Cách viết an toàn để VS Code không báo lỗi đỏ
+    const myId = /*[[${serverId}]]*/ 'Node-Default';
+    const rawPeers = /*[[${peerServers}]]*/ '';
     const peerLinks = (rawPeers && rawPeers !== 'null') ? rawPeers.split(',').filter(p => p.trim()) : [];
-    
+
     let allLogs = [];
     let currentFilter = 'ALL';
 
-    // 1. Khởi tạo Sơ đồ mạng (Cytoscape)
+    // 1. Khởi tạo sơ đồ
     const cy = cytoscape({
         container: document.getElementById('cy'),
         style: [
-            { selector: 'node', style: { 'background-color': '#000', 'border-color': var(--neon-blue), 'border-width': 2, 'label': 'data(label)', 'color': '#fff', 'font-family': 'Fira Code', 'font-size': '10px', 'text-valign': 'center' } },
-            { selector: 'edge', style: { 'width': 1, 'line-color': '#333', 'curve-style': 'bezier', 'target-arrow-shape': 'triangle' } },
-            { selector: '.active', style: { 'line-color': var(--neon-green), 'width': 3, 'transition-duration': '0.5s' } }
+            { selector: 'node', style: { 'background-color': '#000', 'border-color': '#00f2ff', 'border-width': 2, 'label': 'data(label)', 'color': '#fff', 'font-family': 'Fira Code', 'font-size': '10px', 'text-valign': 'center' } },
+            { selector: 'edge', style: { 'width': 1, 'line-color': '#333', 'target-arrow-shape': 'triangle' } }
         ]
     });
 
     function initNetwork() {
-        cy.add({ data: { id: 'me', label: 'ME' } });
-        peerLinks.forEach((p, i) => {
+        cy.add({ data: { id: 'me', label: 'ME (' + myId + ')' } });
+        peerLinks.forEach((link, i) => {
             const pId = 'peer-' + i;
-            cy.add({ data: { id: pId, label: 'NODE ' + (i+1) } });
-            cy.add({ data: { id: 'e'+i, source: 'me', target: pId } });
+            cy.add({ data: { id: pId, label: 'NODE ' + (i + 1) } });
+            cy.add({ data: { id: 'e' + i, source: 'me', target: pId } });
         });
         cy.layout({ name: 'grid' }).run();
     }
 
-    // 2. Xử lý Log chuyên nghiệp
-    function addLog(type, message, serverId, clock) {
-        const logEntry = {
+    // 2. Hàm ghi Log
+    function addLog(type, message, srvId, clock) {
+        const log = {
             time: new Date().toLocaleTimeString('en-GB'),
             type: type.toUpperCase(),
             message: message,
-            serverId: serverId || myId,
+            serverId: srvId || myId,
             clock: clock || 0
         };
-        allLogs.push(logEntry);
-        if (currentFilter === 'ALL' || logEntry.serverId === currentFilter) {
-            appendLogToUI(logEntry);
-        }
-        if (logEntry.clock) document.getElementById('master-clock').innerText = logEntry.clock;
+        allLogs.push(log);
+        if (currentFilter === 'ALL' || log.serverId === currentFilter) appendToUI(log);
+        if (log.clock) document.getElementById('master-clock').innerText = log.clock;
     }
 
-    function appendLogToUI(log) {
+    function appendToUI(log) {
         const consoleEl = document.getElementById('console');
-        const tagClass = 'tag-' + log.type.toLowerCase();
-        const line = `
-            <div class="log-line">
-                <span class="time">[${log.time}]</span>
-                <span class="tag ${tagClass}">[${log.type}]</span>
-                <span class="msg">${log.message}</span>
-            </div>`;
+        const line = `<div class="log-line">
+            <span class="time">[${log.time}]</span>
+            <span class="tag tag-${log.type.toLowerCase()}">[${log.type}]</span>
+            <span>${log.message}</span>
+        </div>`;
         consoleEl.insertAdjacentHTML('beforeend', line);
-        consoleEl.scrollTop = consoleEl.scrollHeight; // Auto-scroll
+        consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
     function setFilter(val, btn) {
@@ -131,11 +118,8 @@
         document.querySelectorAll('.node-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('filter-label').innerText = 'VIEWING: ' + val;
-        
-        // Vẽ lại log khi chuyển filter
-        const consoleEl = document.getElementById('console');
-        consoleEl.innerHTML = '';
-        allLogs.filter(l => val === 'ALL' || l.serverId === val).forEach(appendLogToUI);
+        document.getElementById('console').innerHTML = '';
+        allLogs.filter(l => val === 'ALL' || l.serverId === val).forEach(appendToUI);
     }
 
     // 3. Kết nối WebSocket
@@ -144,14 +128,17 @@
         const stomp = Stomp.over(socket);
         stomp.debug = null;
         stomp.connect({}, () => {
-            addLog('system', 'Kết nối thành công với máy chủ WebSocket...', myId);
+            document.getElementById('ws-status').innerText = 'CONNECTED';
+            document.getElementById('ws-status').style.color = '#39ff14';
+            addLog('system', 'WebSocket connected ròi nè Dương ơi!', myId);
+            
             stomp.subscribe('/topic/logs/' + myId, (res) => {
                 const data = JSON.parse(res.body);
-                // Giả lập chia nhỏ log ra như hình mẫu của bạn
-                addLog('network', `Nhận yêu cầu từ ${data.userId}`, data.serverId, data.lamportClock);
-                addLog('lamport', `Đang giải quyết bầu cử/đồng bộ cho vé ${data.flightId}`, data.serverId, data.lamportClock);
-                addLog('db', `Đang ghi vào MongoDB Atlas...`, data.serverId, data.lamportClock);
-                addLog('booking', `XÁC NHẬN: ${data.userId} đã đặt vé ${data.flightId}`, data.serverId, data.lamportClock);
+                // Tách log cho giống terminal chuyên nghiệp
+                addLog('network', 'Nhận request từ ' + data.userId, data.serverId, data.lamportClock);
+                addLog('lamport', 'Đồng bộ Lamport Clock...', data.serverId, data.lamportClock);
+                addLog('db', 'Ghi dữ liệu vào MongoDB...', data.serverId, data.lamportClock);
+                addLog('booking', 'SUCCESS: Khách ' + data.userId + ' đặt vé ' + data.flightId, data.serverId, data.lamportClock);
             });
         });
     }
@@ -159,11 +146,9 @@
     window.onload = () => {
         initNetwork();
         connect();
-        // Log khởi tạo giả lập cho đẹp
         addLog('system', 'Server đang khởi tạo...', myId);
-        addLog('db', 'Đã kết nối MongoDB: Cluster0', myId);
     };
+    /*]]>*/
 </script>
-
 </body>
 </html>
