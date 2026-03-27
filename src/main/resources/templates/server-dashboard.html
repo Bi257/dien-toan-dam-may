@@ -81,7 +81,8 @@
 
 <script th:inline="javascript">
     const myServerId = /*[[${serverId}]]*/ 'Cloud-Server-Duong';
-    const peerLinks = /*[[${peerServers}]]*/ []; 
+    // Sửa dòng cũ thành dòng này để không bị lỗi khi chưa có link bạn bè
+const peerLinks = "[[${peerServers}]]" ? "[[${peerServers}]]".split(',').filter(p => p) : [];
     const neonColor = "#00ffff";
     const syncColor = "#ff00ff";
 
