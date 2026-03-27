@@ -1,154 +1,134 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>Distributed System Control Panel</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline';">
-    
+    <title>Distributed OS Control Panel</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     
     <style>
-        :root { --bg: #0a0a0a; --neon-blue: #00f2ff; --neon-green: #39ff14; --terminal-text: #00ff41; --border: #1a1a1a; }
+        :root { --bg: #050505; --neon-blue: #00f2ff; --neon-green: #39ff14; --border: #1a1a1a; }
         body { background: var(--bg); color: #fff; font-family: 'Fira Code', monospace; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        #sidebar { width: 220px; background: #000; border-right: 1px solid var(--border); padding: 15px; z-index: 10; }
-        .nav-title { font-family: 'Orbitron'; font-size: 0.8rem; color: #666; margin-bottom: 15px; letter-spacing: 2px; }
-        .node-btn { width: 100%; padding: 12px; margin-bottom: 8px; background: #111; border: 1px solid #333; color: #888; cursor: pointer; text-align: left; transition: 0.3s; font-family: 'Fira Code'; }
-        .node-btn:hover { border-color: var(--neon-blue); color: #fff; }
+        #sidebar { width: 240px; background: #000; border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; }
+        .brand { color: var(--neon-blue); font-family: 'Orbitron'; font-size: 0.9rem; margin-bottom: 30px; letter-spacing: 2px; }
+        .node-btn { width: 100%; padding: 12px; margin-bottom: 8px; background: #111; border: 1px solid #333; color: #888; cursor: pointer; text-align: left; font-size: 0.75rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
         .node-btn.active { border-left: 4px solid var(--neon-blue); background: #1a1a1a; color: var(--neon-blue); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #444; }
+        .status-dot.active { background: var(--neon-green); box-shadow: 0 0 5px var(--neon-green); }
         #main { flex: 1; display: flex; flex-direction: column; }
         #top-half { height: 45%; border-bottom: 1px solid var(--border); position: relative; }
         #bottom-half { height: 55%; background: #000; display: flex; flex-direction: column; }
-        .terminal-header { background: #1a1a1a; padding: 8px 15px; font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
-        #console { flex: 1; padding: 15px; overflow-y: auto; font-size: 0.9rem; line-height: 1.5; color: var(--terminal-text); }
+        .terminal-header { background: #111; padding: 10px 15px; font-size: 0.7rem; color: #aaa; border-bottom: 1px solid var(--border); }
+        #console { flex: 1; padding: 15px; overflow-y: auto; font-size: 0.8rem; color: #00ff41; }
         .log-line { margin: 2px 0; display: flex; gap: 10px; }
-        .time { color: #555; min-width: 85px; }
-        .tag { font-weight: bold; min-width: 100px; }
-        .tag-system { color: #fff; }
-        .tag-lamport { color: #eab308; }
-        .tag-db { color: #3b82f6; }
-        .tag-booking { color: var(--neon-green); }
+        .tag-booking { color: var(--neon-green); font-weight: bold; }
         #cy { width: 100%; height: 100%; }
-        .status-box { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); border: 1px solid var(--neon-blue); padding: 10px; border-radius: 4px; font-size: 0.8rem; z-index: 5; }
+        .info-box { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); border: 1px solid var(--neon-blue); padding: 10px; border-radius: 4px; font-size: 0.75rem; z-index: 5; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div class="nav-title">CONTROL CENTER</div>
-    <button class="node-btn active" onclick="setFilter('ALL', this)">[ ALL NODES ]</button>
-    <button class="node-btn" th:onclick="setFilter([[${serverId}]], this)">[ MY NODE ]</button>
+    <div class="brand">● DISTRIBUTED OS</div>
+    <button class="node-btn active" onclick="setFilter('ALL', this)">[ VIEW ALL NODES ]</button>
+    <button class="node-btn" th:id="'btn-' + ${serverId}" th:onclick="setFilter([[${serverId}]], this)">
+        <span th:text="'> ' + ${serverId}"></span>
+        <div class="status-dot active"></div>
+    </button>
+    <div id="peer-list"></div>
 </div>
 
 <div id="main">
     <div id="top-half">
-        <div class="status-box">
-            NODE ID: <span th:text="${serverId}" style="color:var(--neon-blue)"></span><br>
-            STATUS: <span id="ws-status" style="color:red">DISCONNECTED</span><br>
+        <div class="info-box">
+            NODE: <span th:text="${serverId}" style="color:var(--neon-blue)"></span> | 
             CLOCK: <span id="master-clock" style="color:var(--neon-blue)">0</span>
         </div>
         <div id="cy"></div>
     </div>
     <div id="bottom-half">
-        <div class="terminal-header">
-            <span>REAL-TIME SERVER LOGS</span>
-            <span id="filter-label">VIEWING: ALL</span>
-        </div>
+        <div class="terminal-header">> LOG CONSOLE - <span id="filter-label">ALL</span></div>
         <div id="console"></div>
     </div>
 </div>
 
 <script th:inline="javascript">
-    /*<![CDATA[*/
-    // Cách viết an toàn để VS Code không báo lỗi đỏ
+/*<![CDATA[*/
+    // Cách viết này giúp VS Code không báo lỗi cú pháp
     const myId = /*[[${serverId}]]*/ 'Node-Default';
-    const rawPeers = /*[[${peerServers}]]*/ '';
-    const peerLinks = (rawPeers && rawPeers !== 'null') ? rawPeers.split(',').filter(p => p.trim()) : [];
+    const peerString = /*[[${peerServers}]]*/ '';
+    const peerLinks = (peerString && peerString !== 'null') ? peerString.split(',') : [];
 
     let allLogs = [];
     let currentFilter = 'ALL';
 
-    // 1. Khởi tạo sơ đồ
     const cy = cytoscape({
         container: document.getElementById('cy'),
         style: [
-            { selector: 'node', style: { 'background-color': '#000', 'border-color': '#00f2ff', 'border-width': 2, 'label': 'data(label)', 'color': '#fff', 'font-family': 'Fira Code', 'font-size': '10px', 'text-valign': 'center' } },
-            { selector: 'edge', style: { 'width': 1, 'line-color': '#333', 'target-arrow-shape': 'triangle' } }
+            { selector: 'node', style: { 'background-color': '#000', 'border-color': '#00f2ff', 'border-width': 2, 'label': 'data(label)', 'color': '#fff', 'font-family': 'Fira Code', 'font-size': '10px', 'text-valign': 'bottom' } },
+            { selector: 'edge', style: { 'width': 1, 'line-color': '#333' } }
         ]
     });
 
     function initNetwork() {
-        cy.add({ data: { id: 'me', label: 'ME (' + myId + ')' } });
-        peerLinks.forEach((link, i) => {
-            const pId = 'peer-' + i;
-            cy.add({ data: { id: pId, label: 'NODE ' + (i + 1) } });
-            cy.add({ data: { id: 'e' + i, source: 'me', target: pId } });
+        cy.add({ data: { id: myId, label: 'ME (' + myId + ')' } });
+        peerLinks.forEach((p, i) => {
+            const pId = p.trim();
+            if (pId) {
+                cy.add({ data: { id: pId, label: pId } });
+                cy.add({ data: { id: 'e'+i, source: myId, target: pId } });
+                document.getElementById('peer-list').insertAdjacentHTML('beforeend', 
+                    `<button class="node-btn" onclick="setFilter('${pId}', this)"><span>> ${pId}</span><div id="dot-${pId}" class="status-dot"></div></button>`
+                );
+            }
         });
-        cy.layout({ name: 'grid' }).run();
+        cy.layout({ name: 'circle', radius: 90 }).run();
     }
 
-    // 2. Hàm ghi Log
     function addLog(type, message, srvId, clock) {
-        const log = {
-            time: new Date().toLocaleTimeString('en-GB'),
-            type: type.toUpperCase(),
-            message: message,
-            serverId: srvId || myId,
-            clock: clock || 0
-        };
+        const log = { time: new Date().toLocaleTimeString(), type, message, serverId: srvId || myId, clock: clock || 0 };
         allLogs.push(log);
         if (currentFilter === 'ALL' || log.serverId === currentFilter) appendToUI(log);
-        if (log.clock) document.getElementById('master-clock').innerText = log.clock;
+        if (log.clock > 0 && log.serverId === myId) document.getElementById('master-clock').innerText = log.clock;
     }
 
     function appendToUI(log) {
-        const consoleEl = document.getElementById('console');
-        const line = `<div class="log-line">
-            <span class="time">[${log.time}]</span>
-            <span class="tag tag-${log.type.toLowerCase()}">[${log.type}]</span>
-            <span>${log.message}</span>
-        </div>`;
-        consoleEl.insertAdjacentHTML('beforeend', line);
-        consoleEl.scrollTop = consoleEl.scrollHeight;
+        const line = `<div class="log-line"><span>[${log.time}]</span><span class="tag-${log.type.toLowerCase()}">[${log.type}]</span><span>@${log.serverId}: ${log.message}</span></div>`;
+        const c = document.getElementById('console');
+        c.insertAdjacentHTML('beforeend', line);
+        c.scrollTop = c.scrollHeight;
     }
 
     function setFilter(val, btn) {
         currentFilter = val;
         document.querySelectorAll('.node-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('filter-label').innerText = 'VIEWING: ' + val;
+        document.getElementById('filter-label').innerText = val;
         document.getElementById('console').innerHTML = '';
         allLogs.filter(l => val === 'ALL' || l.serverId === val).forEach(appendToUI);
     }
 
-    // 3. Kết nối WebSocket
     function connect() {
         const socket = new SockJS('/ws-log');
         const stomp = Stomp.over(socket);
         stomp.debug = null;
         stomp.connect({}, () => {
-            document.getElementById('ws-status').innerText = 'CONNECTED';
-            document.getElementById('ws-status').style.color = '#39ff14';
-            addLog('system', 'WebSocket connected ròi nè Dương ơi!', myId);
-            
+            addLog('SYSTEM', 'Kết nối WebSocket thành công!', myId);
             stomp.subscribe('/topic/logs/' + myId, (res) => {
                 const data = JSON.parse(res.body);
-                // Tách log cho giống terminal chuyên nghiệp
-                addLog('network', 'Nhận request từ ' + data.userId, data.serverId, data.lamportClock);
-                addLog('lamport', 'Đồng bộ Lamport Clock...', data.serverId, data.lamportClock);
-                addLog('db', 'Ghi dữ liệu vào MongoDB...', data.serverId, data.lamportClock);
-                addLog('booking', 'SUCCESS: Khách ' + data.userId + ' đặt vé ' + data.flightId, data.serverId, data.lamportClock);
+                const dot = document.getElementById('dot-' + data.serverId);
+                if (dot) dot.classList.add('active');
+                addLog('BOOKING', 'Đặt vé ' + data.flightId + ' thành công', data.serverId, data.lamportClock);
             });
         });
     }
 
-    window.onload = () => {
-        initNetwork();
-        connect();
-        addLog('system', 'Server đang khởi tạo...', myId);
-    };
-    /*]]>*/
+    window.onload = () => { initNetwork(); connect(); };
+/*]]>*/
 </script>
 </body>
 </html>
