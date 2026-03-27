@@ -1,79 +1,70 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html>
 <head>
-    <title>VietSky - Đặt Vé Máy Bay</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/css/client.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Flight Client - Distributed System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { background: #020617; color: #fff; font-family: 'Orbitron', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { width: 400px; padding: 30px; border: 2px solid #00ffff; border-radius: 20px; box-shadow: 0 0 30px rgba(0,255,255,0.2); background: rgba(255,255,255,0.02); }
+        h2 { text-align: center; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; font-size: 0.8em; color: #888; }
+        select, input { width: 100%; padding: 12px; background: #000; border: 1px solid #333; color: #fff; border-radius: 5px; box-sizing: border-box; }
+        select:focus, input:focus { border-color: #00ffff; outline: none; }
+        button { width: 100%; padding: 15px; background: #00ffff; border: none; border-radius: 5px; color: #000; font-weight: bold; font-family: 'Orbitron'; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #fff; box-shadow: 0 0 20px #fff; }
+        #res { margin-top: 20px; padding: 10px; border-radius: 5px; font-size: 0.9em; text-align: center; display: none; }
+    </style>
 </head>
 <body>
-    <nav class="navbar">
-    <div class="logo">Viet<span>Sky</span></div>
-    
-    <div class="server-selector">
-        <label for="serverSelect">Kết nối tới Trạm:</label>
-        <select id="serverSelect" onchange="changeServer(this.value)">
-            </select>
+
+<div class="card">
+    <h2>RESERVATION</h2>
+    <div class="input-group">
+        <label>TARGET SERVER</label>
+        <select id="url">
+            <option value="">-- Select Server --</option>
+            <option value="http://localhost:8080">Local Server (Test)</option>
+            <option value="https://flight-server-duong.render.com">Cloud Node 1 (My Node)</option>
+            <option value="https://peer-server-2.render.com">Cloud Node 2</option>
+        </select>
     </div>
-
-    <div class="connection-info">
-        <div class="station-tag">
-            <span class="dot"></span>
-            Máy chủ hiện tại: <strong id="currentIpDisplay" th:text="${serverIp}">192.168.1.x</strong>
-        </div>
-        <div class="id-tag">
-            ID: <span th:text="${serverId}">Server-01</span>
-        </div>
+    <div class="input-group">
+        <label>FLIGHT ID</label>
+        <input type="text" id="flight" placeholder="e.g. VJ123">
     </div>
-</nav>
-
-    <div class="hero-section">
-        <h1>Khám phá thế giới cùng VietSky</h1>
-        <p>Hệ thống đặt vé phân tán thời gian thực</p>
+    <div class="input-group">
+        <label>PASSENGER NAME</label>
+        <input type="text" id="user" placeholder="Enter your name">
     </div>
+    <button onclick="book()">CONFIRM BOOKING</button>
+    <div id="res"></div>
+</div>
 
-    <div class="booking-card">
-        <div class="search-form">
-            <div class="input-group">
-                <label>Họ và tên</label>
-                <input type="text" id="passengerName" placeholder="Nhập tên của bạn...">
-            </div>
-            <div class="input-group">
-                <label>Chuyến bay</label>
-                <select id="flightId">
-                    <option value="VN123">VN123 - Đà Nẵng (DAD) ➔ Hà Nội (HAN)</option>
-                    <option value="VJ456">VJ456 - Đà Nẵng (DAD) ➔ TP.HCM (SGN)</option>
-                    <option value="QH789">QH789 - Đà Nẵng (DAD) ➔ Phú Quốc (PQC)</option>
-                </select>
-            </div>
-            <button class="btn-book" onclick="confirmBooking()">Đặt vé ngay</button>
-        </div>
-    </div>
+<script>
+    async function book() {
+        const url = document.getElementById('url').value;
+        const flight = document.getElementById('flight').value;
+        const user = document.getElementById('user').value;
+        const resBox = document.getElementById('res');
 
-    <div id="toast" class="toast">Đang xử lý đặt vé...</div>
+        if(!url || !flight || !user) { alert("Please fill all fields!"); return; }
 
-    <script>
-        async function confirmBooking() {
-            const name = document.getElementById('passengerName').value;
-            const flight = document.getElementById('flightId').value;
-            
-            if(!name) { alert("Vui lòng nhập tên!"); return; }
+        resBox.style.display = 'block';
+        resBox.style.background = '#333';
+        resBox.innerText = "Processing...";
 
-            const toast = document.getElementById('toast');
-            toast.innerText = "🚀 Đang gửi yêu cầu tới hệ thống phân tán...";
-            toast.classList.add('show');
-
-            try {
-                // Gọi API tới server hiện tại
-                const response = await fetch(`/api/booking?flightId=${flight}&userId=${name}`, { method: 'POST' });
-                const result = await response.text();
-                
-                toast.innerText = "✅ " + result;
-                setTimeout(() => toast.classList.remove('show'), 5000);
-            } catch (error) {
-                toast.innerText = "❌ Lỗi kết nối server!";
-            }
+        try {
+            const api = `${url}/api/booking?flightId=${flight}&userId=${user}`;
+            const response = await fetch(api, { method: 'POST' });
+            const msg = await response.text();
+            resBox.style.background = '#065f46';
+            resBox.innerText = "SUCCESS: " + msg;
+        } catch (err) {
+            resBox.style.background = '#991b1b';
+            resBox.innerText = "FAILED: Connection Refused!";
         }
-    </script>
+    }
+</script>
 </body>
 </html>

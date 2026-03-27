@@ -1,175 +1,122 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>Distributed System Monitor - Neon NOC</title>
+    <title>Distributed Monitor - Neon Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=VT323&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-    
     <style>
-        :root {
-            --bg-color: #020617;
-            --primary-neon: #00ffff;
-            --secondary-neon: #ff00ff;
-            --error-neon: #ff3131;
-            --text-color: #f0f9ff;
-        }
+        :root { --bg: #020617; --neon: #00ffff; --sync: #ff00ff; --err: #ff3131; --text: #f0f9ff; }
+        body { background: var(--bg); color: var(--text); font-family: 'Orbitron', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar chọn Server */
+        #sidebar { width: 250px; border-right: 2px solid var(--neon); padding: 20px; background: rgba(0,255,255,0.02); }
+        .nav-btn { width: 100%; padding: 10px; margin-bottom: 10px; background: none; border: 1px solid var(--neon); color: var(--neon); cursor: pointer; font-family: 'Orbitron'; }
+        .nav-btn.active { background: var(--neon); color: #000; box-shadow: 0 0 15px var(--neon); }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Orbitron', sans-serif;
-            margin: 0; padding: 20px;
-            overflow: hidden; display: flex; height: 100vh;
-        }
-
-        #main-container { display: flex; width: 100%; height: 100%; gap: 20px; }
-
-        #visualizer-panel {
-            flex: 1.5; background: rgba(0, 255, 255, 0.03);
-            border: 2px solid var(--primary-neon); border-radius: 12px;
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
-            position: relative; display: flex; flex-direction: column; padding: 20px;
-        }
-
-        #network-canvas { width: 100%; height: 100%; }
-
-        #log-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-
-        .server-header {
-            border: 1px solid var(--primary-neon); padding: 15px;
-            border-radius: 8px; background: rgba(0, 255, 255, 0.05);
-        }
-
-        #log-container {
-            flex: 1; background: rgba(0, 0, 0, 0.7);
-            border: 1px solid #333; border-radius: 8px;
-            padding: 15px; overflow-y: auto;
-            font-family: 'VT323', monospace; font-size: 1.2em;
-            display: flex; flex-direction: column-reverse;
-        }
-
-        .log-entry { margin: 5px 0; border-bottom: 1px dashed #222; padding-bottom: 5px; }
-        .log-type-booking { color: var(--primary-neon); }
-        .log-type-sync { color: var(--secondary-neon); }
-        .log-type-error { color: var(--error-neon); font-weight: bold; }
+        #main-content { flex: 1; display: flex; gap: 10px; padding: 10px; }
+        #visualizer { flex: 1.2; border: 1px solid var(--neon); border-radius: 10px; position: relative; }
+        #log-panel { flex: 1; display: flex; flex-direction: column; border: 1px solid #333; border-radius: 10px; background: rgba(0,0,0,0.5); }
+        #log-container { flex: 1; padding: 15px; overflow-y: auto; font-family: 'VT323'; font-size: 1.2em; display: flex; flex-direction: column-reverse; }
+        
+        .log-entry { margin: 5px 0; border-bottom: 1px solid #1e293b; padding-bottom: 5px; }
+        .tag { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; margin-right: 5px; }
+        .tag-booking { background: var(--neon); color: #000; }
+        .tag-sync { background: var(--sync); color: #fff; }
     </style>
 </head>
 <body>
 
-<div id="main-container">
-    <div id="visualizer-panel">
-        <div style="color:var(--primary-neon); text-align:center; font-size:1.5em; margin-bottom:10px;">NETWORK TOPOLOGY VISUALIZER</div>
-        <div id="network-canvas"></div>
+<div id="sidebar">
+    <h3 style="color: var(--neon)">CONTROL CENTER</h3>
+    <button class="nav-btn active" onclick="filterLog('ALL', this)">GLOBAL VIEW</button>
+    <button class="nav-btn" th:onclick="filterLog([[${serverId}]], this)">MY NODE ONLY</button>
+    <hr style="border-color: #1e293b">
+    <div style="font-size: 0.8em; color: #666;">
+        Status: <span style="color: #0f0">ONLINE</span><br>
+        Clock: <span id="clock-val" style="color: var(--neon)">0</span>
     </div>
+</div>
 
+<div id="main-content">
+    <div id="visualizer">
+        <div id="network-canvas" style="width: 100%; height: 100%;"></div>
+    </div>
     <div id="log-panel">
-        <div class="server-header">
-            <h1 th:text="'NODE: ' + ${serverId}">Server-Duong</h1>
-            <div style="font-family:'VT323'; color:#888;">
-                Status: <span style="color: #0f0;">ONLINE</span> | 
-                Clock: <span id="lamport-clock" style="color:var(--primary-neon)">0</span> |
-                Peers: <span id="peer-count">0</span>/4
-            </div>
-        </div>
-        <div id="log-container">
-            <div class="log-entry" style="color:#666;">[System] Awaiting WebSocket connection...</div>
-        </div>
+        <div style="padding: 10px; border-bottom: 1px solid #333; text-align: center;">SERVER LOGS</div>
+        <div id="log-container"></div>
     </div>
 </div>
 
 <script th:inline="javascript">
-    const myServerId = /*[[${serverId}]]*/ 'Cloud-Server-Duong';
-    // Sửa dòng cũ thành dòng này để không bị lỗi khi chưa có link bạn bè
-const peerLinks = "[[${peerServers}]]" ? "[[${peerServers}]]".split(',').filter(p => p) : [];
-    const neonColor = "#00ffff";
-    const syncColor = "#ff00ff";
+    const myId = /*[[${serverId}]]*/ 'Duong-Server';
+    const rawPeers = /*[[${peerServers}]]*/ '';
+    // Fix lỗi split khi chưa có bạn bè
+    const peerLinks = (rawPeers && rawPeers !== 'null') ? rawPeers.split(',').filter(p => p) : [];
+    
+    let allLogs = [];
+    let currentFilter = 'ALL';
 
-    // --- 1. KHỞI TẠO CYTOSCAPE ---
+    // Khởi tạo Cytoscape
     const cy = cytoscape({
         container: document.getElementById('network-canvas'),
         style: [
-            {
-                selector: 'node',
-                style: {
-                    'background-color': '#020617',
-                    'border-color': neonColor,
-                    'border-width': 2,
-                    'label': 'data(label)',
-                    'color': '#fff',
-                    'width': '50px', 'height': '50px',
-                    'font-size': '10px', 'text-valign': 'center'
-                }
-            },
-            {
-                selector: 'edge',
-                style: { 'width': 2, 'line-color': '#333', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' }
-            },
-            {
-                selector: '.active-edge',
-                style: { 'line-color': syncColor, 'width': 4, 'target-arrow-color': syncColor }
-            }
+            { selector: 'node', style: { 'background-color': '#000', 'border-color': '#00ffff', 'border-width': 2, 'label': 'data(label)', 'color': '#fff', 'font-size': '10px', 'text-valign': 'center' } },
+            { selector: 'edge', style: { 'width': 2, 'line-color': '#333', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' } },
+            { selector: '.active-edge', style: { 'line-color': '#ff00ff', 'width': 4 } }
         ],
         elements: []
     });
 
-    // --- 2. TẠO NODE ---
-    function initNetworkNodes() {
-        cy.add({ data: { id: 'me', label: 'ME (' + myServerId + ')' }, position: { x: 300, y: 250 } });
-        
-        let peers = Array.isArray(peerLinks) ? peerLinks : peerLinks.split(',').filter(p => p);
-        peers.forEach((link, i) => {
-            const angle = (i / peers.length) * Math.PI * 2;
-            const x = 300 + 150 * Math.cos(angle);
-            const y = 250 + 150 * Math.sin(angle);
-            const peerId = 'peer_' + i;
-            cy.add({ data: { id: peerId, label: 'Node ' + (i+1) } , position: { x, y } });
-            cy.add({ data: { id: 'edge_' + i, source: 'me', target: peerId } });
+    function initNetwork() {
+        cy.add({ data: { id: 'me', label: 'ME ('+myId+')' }, position: { x: 250, y: 200 } });
+        peerLinks.forEach((link, i) => {
+            const id = 'p' + i;
+            cy.add({ data: { id: id, label: 'Peer ' + (i+1) }, position: { x: 250 + 150*Math.cos(i), y: 200 + 150*Math.sin(i) } });
+            cy.add({ data: { id: 'e'+i, source: 'me', target: id } });
         });
-        document.getElementById('peer-count').innerText = peers.length;
     }
 
-    // --- 3. KẾT NỐI WEBSOCKET ---
-    function connectWebSocket() {
+    function connectWS() {
         const socket = new SockJS('/ws-log');
-        const stompClient = Stomp.over(socket);
-        
-        // Tắt log loằng ngoằng của Stomp trong Console
-        stompClient.debug = null;
-
-        stompClient.connect({}, function (frame) {
-            console.log('Connected to WebSocket!');
-            stompClient.subscribe('/topic/logs/' + myServerId, function (logDto) {
-                addLogEntry(JSON.parse(logDto.body));
+        const stomp = Stomp.over(socket);
+        stomp.debug = null;
+        stomp.connect({}, () => {
+            stomp.subscribe('/topic/logs/' + myId, (res) => {
+                const log = JSON.parse(res.body);
+                allLogs.push(log);
+                if (log.type === 'BOOKING') {
+                    cy.edges().addClass('active-edge');
+                    setTimeout(() => cy.edges().removeClass('active-edge'), 1000);
+                }
+                updateUI();
             });
-        }, function(error) {
-            console.error('WebSocket Error: ', error);
-            setTimeout(connectWebSocket, 5000); // Thử kết nối lại sau 5s nếu lỗi
         });
     }
 
-    function addLogEntry(log) {
-        const container = document.getElementById('log-container');
-        const timeStr = new Date().toLocaleTimeString();
-        let typeClass = 'log-type-' + (log.type || 'info').toLowerCase();
-        
-        if (log.type === 'BOOKING') {
-            cy.edges().addClass('active-edge');
-            setTimeout(() => cy.edges().removeClass('active-edge'), 1000);
-        }
-
-        const html = `<div class="log-entry ${typeClass}">
-            <span style="color:#666">[${timeStr}]</span> <b>${log.type}:</b> ${log.message}
-        </div>`;
-        container.insertAdjacentHTML('afterbegin', html);
-        if (log.lamportClock) document.getElementById('lamport-clock').innerText = log.lamportClock;
+    function filterLog(val, btn) {
+        currentFilter = val;
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateUI();
     }
 
-    window.onload = function() {
-        initNetworkNodes();
-        connectWebSocket();
-    };
+    function updateUI() {
+        const container = document.getElementById('log-container');
+        container.innerHTML = '';
+        const filtered = allLogs.filter(l => currentFilter === 'ALL' || l.serverId === currentFilter);
+        filtered.forEach(l => {
+            const html = `<div class="log-entry">
+                <span class="tag ${l.type === 'BOOKING' ? 'tag-booking' : 'tag-sync'}">${l.type}</span>
+                <span style="color: #666">[${new Date().toLocaleTimeString()}]</span> ${l.message}
+            </div>`;
+            container.insertAdjacentHTML('afterbegin', html);
+            if(l.lamportClock) document.getElementById('clock-val').innerText = l.lamportClock;
+        });
+    }
+
+    window.onload = () => { initNetwork(); connectWS(); };
 </script>
 </body>
 </html>
