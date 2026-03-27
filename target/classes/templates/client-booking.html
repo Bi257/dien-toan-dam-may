@@ -1,69 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Flight Client - Distributed System</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <title>Booking Client</title>
     <style>
-        body { background: #020617; color: #fff; font-family: 'Orbitron', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { width: 400px; padding: 30px; border: 2px solid #00ffff; border-radius: 20px; box-shadow: 0 0 30px rgba(0,255,255,0.2); background: rgba(255,255,255,0.02); }
-        h2 { text-align: center; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
-        .input-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; font-size: 0.8em; color: #888; }
-        select, input { width: 100%; padding: 12px; background: #000; border: 1px solid #333; color: #fff; border-radius: 5px; box-sizing: border-box; }
-        select:focus, input:focus { border-color: #00ffff; outline: none; }
-        button { width: 100%; padding: 15px; background: #00ffff; border: none; border-radius: 5px; color: #000; font-weight: bold; font-family: 'Orbitron'; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #fff; box-shadow: 0 0 20px #fff; }
-        #res { margin-top: 20px; padding: 10px; border-radius: 5px; font-size: 0.9em; text-align: center; display: none; }
+        body { background: #020617; color: #fff; font-family: sans-serif; padding: 20px; }
+        .container { max-width: 500px; margin: auto; border: 1px solid #00ffff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #00ffff; }
+        select, input { width: 100%; padding: 10px; margin: 10px 0; background: #000; color: #00ffff; border: 1px solid #00ffff; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #00ffff; color: #000; border: none; font-weight: bold; cursor: pointer; }
+        #status { margin-top: 15px; padding: 10px; border-radius: 5px; display: none; text-align: center; }
     </style>
 </head>
 <body>
-
-<div class="card">
-    <h2>RESERVATION</h2>
-    <div class="input-group">
-        <label>TARGET SERVER</label>
-        <select id="url">
-            <option value="https://booking-server-b2fh.onrender.com">Server của tôi (Node 1)</option>
+    <div class="container">
+        <h2 style="text-align: center; color: #00ffff;">ĐẶT VÉ MÁY BAY</h2>
+        
+        <label>Chọn Server xử lý:</label>
+        <select id="serverUrl">
+            <option value="https://booking-server-b2fh.onrender.com">Server của Dương (Node 1)</option>
             <option value="https://flight-booking-app-jwd4.onrender.com">Server bạn A (Node 2)</option>
             <option value="https://flight-booking-distributed.onrender.com">Server bạn B (Node 3)</option>
         </select>
+
+        <label>Mã chuyến bay:</label>
+        <input type="text" id="flightId" placeholder="VD: VN123">
+        
+        <label>Tên khách hàng:</label>
+        <input type="text" id="userId" placeholder="Nhập tên của bạn">
+        
+        <button onclick="sendBooking()">XÁC NHẬN ĐẶT VÉ</button>
+        
+        <div id="status"></div>
     </div>
-    <div class="input-group">
-        <label>FLIGHT ID</label>
-        <input type="text" id="flight" placeholder="e.g. VJ123">
-    </div>
-    <div class="input-group">
-        <label>PASSENGER NAME</label>
-        <input type="text" id="user" placeholder="Enter your name">
-    </div>
-    <button onclick="book()">CONFIRM BOOKING</button>
-    <div id="res"></div>
-</div>
 
-<script>
-    async function book() {
-        const url = document.getElementById('url').value;
-        const flight = document.getElementById('flight').value;
-        const user = document.getElementById('user').value;
-        const resBox = document.getElementById('res');
+    <script>
+        async function sendBooking() {
+            const baseUrl = document.getElementById('serverUrl').value;
+            const flightId = document.getElementById('flightId').value;
+            const userId = document.getElementById('userId').value;
+            const statusDiv = document.getElementById('status');
 
-        if(!url || !flight || !user) { alert("Please fill all fields!"); return; }
+            if(!flightId || !userId) {
+                alert("Vui lòng nhập đầy đủ thông tin!");
+                return;
+            }
 
-        resBox.style.display = 'block';
-        resBox.style.background = '#333';
-        resBox.innerText = "Processing...";
+            statusDiv.style.display = 'block';
+            statusDiv.style.background = '#333';
+            statusDiv.innerText = "Đang gửi yêu cầu...";
 
-        try {
-            const api = `${url}/api/booking?flightId=${flight}&userId=${user}`;
-            const response = await fetch(api, { method: 'POST' });
-            const msg = await response.text();
-            resBox.style.background = '#065f46';
-            resBox.innerText = "SUCCESS: " + msg;
-        } catch (err) {
-            resBox.style.background = '#991b1b';
-            resBox.innerText = "FAILED: Connection Refused!";
+            try {
+                // Gọi API đến Server đã chọn
+                const response = await fetch(`${baseUrl}/api/booking?flightId=${flightId}&userId=${userId}`, {
+                    method: 'POST'
+                });
+                const result = await response.text();
+                
+                statusDiv.style.background = '#065f46';
+                statusDiv.innerText = "THÀNH CÔNG: " + result;
+            } catch (err) {
+                statusDiv.style.background = '#991b1b';
+                statusDiv.innerText = "THẤT BẠI: Server này có thể đang tắt!";
+            }
         }
-    }
-</script>
+    </script>
 </body>
 </html>
