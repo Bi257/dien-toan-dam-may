@@ -20,7 +20,7 @@ import com.ued.distributedsystem.repository.BookingRepository;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // Quan trọng để không bị lỗi "Ngoại tuyến"
+@CrossOrigin(origins = "*") // Fix lỗi "Node ngoại tuyến" do chặn CORS
 public class BookingController {
 
     @Autowired
@@ -44,6 +44,9 @@ public class BookingController {
     private final ExecutorService executor = Executors.newFixedThreadPool(10);
     private final RestTemplate restTemplate = new RestTemplate();
 
+    /**
+     * GỬI LOG LÊN DASHBOARD NEON
+     */
     private void sendToDashboard(String type, String message, int clock) {
         Map<String, Object> logData = new HashMap<>();
         logData.put("type", type);
@@ -52,22 +55,23 @@ public class BookingController {
         messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
-    // 1. XỬ LÝ ĐẶT VÉ TỪ CLIENT (Đã sửa để nhận JSON Body)
+    // 1. XỬ LÝ ĐẶT VÉ TỪ CLIENT (Dùng @RequestBody để nhận JSON, fix lỗi undefined)
     @PostMapping("/bookings")
     public ResponseEntity<Map<String, Object>> handleClientBooking(@RequestBody Map<String, String> payload) {
 
+        // Bóc dữ liệu từ JSON Body
         String flightId = payload.get("flightId");
         String userId = payload.get("userId");
 
-        // A. Tăng đồng hồ Lamport
+        // Tăng đồng hồ Lamport
         int currentTime = lamportClock.tick();
 
-        // B. Gửi Log lên Dashboard
-        sendToDashboard("BOOKING", "Khách " + userId + " đặt vé: " + flightId, currentTime);
+        // Gửi Log - Hết lỗi undefined vì đã có dữ liệu từ payload
+        sendToDashboard("BOOKING", "XÁC NHẬN: Khách [" + userId + "] đặt vé " + flightId, currentTime);
         logService.addLog("BOOKING", "Nhận yêu cầu từ " + userId + ". Flight: " + flightId, currentTime);
 
         try {
-            // C. Lưu vào MongoDB Atlas
+            // Lưu vào MongoDB Atlas
             Booking newBooking = new Booking();
             newBooking.setPassengerName(userId);
             newBooking.setFlightId(flightId);
@@ -75,23 +79,23 @@ public class BookingController {
             newBooking.setServerId(serverId);
 
             bookingRepository.save(newBooking);
-            logService.addLog("INFO", "Đã lưu vé lên MongoDB Atlas", currentTime);
+            logService.addLog("INFO", "Ghi transaction vào MongoDB Cluster0", currentTime);
         } catch (Exception e) {
             sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), currentTime);
         }
 
-        // D. Phát tín hiệu đồng bộ cho các server còn lại
+        // Phát tín hiệu đồng bộ cho các server khác (Node Trâm, Node Chung...)
         broadcastSyncMessage(flightId, userId, currentTime);
 
-        // Trả về JSON để Frontend nhận diện thành công
+        // Trả về kết quả cho Frontend
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "Đặt vé thành công!");
+        response.put("message", "Thành công");
         response.put("lamportClock", currentTime);
 
         return ResponseEntity.ok(response);
     }
 
-    // 2. XỬ LÝ KHI NHẬN ĐƯỢC TIN ĐỒNG BỘ TỪ SERVER BẠN
+    // 2. XỬ LÝ ĐỒNG BỘ TỪ SERVER BẠN
     @PostMapping("/sync")
     public void handleSyncMessage(@RequestParam String serverOrigin,
             @RequestParam String flightId,
@@ -102,7 +106,7 @@ public class BookingController {
         int newTime = lamportClock.getTime();
 
         sendToDashboard("SYNC", "Nhận đồng bộ từ " + serverOrigin, newTime);
-        logService.addLog("SYNC", "Đồng bộ từ " + serverOrigin + " cho khách: " + userId, newTime);
+        logService.addLog("SYNC", "Đồng bộ Clock (L_max + 1) từ " + serverOrigin, newTime);
     }
 
     @GetMapping("/logs/private-view")
@@ -110,7 +114,7 @@ public class BookingController {
         return logService.getAllLogs();
     }
 
-    // 3. HÀM PHÁT TÁN BẢN TIN (BROADCAST)
+    // 3. BROADCAST
     private void broadcastSyncMessage(String flightId, String userId, int currentTime) {
         for (String peerUrl : peerServers) {
             if (peerUrl == null || peerUrl.trim().isEmpty())
@@ -118,16 +122,14 @@ public class BookingController {
 
             executor.submit(() -> {
                 try {
-                    // Link sync vẫn dùng RequestParam vì nó là server-to-server
                     String url = peerUrl + "/api/sync?serverOrigin=" + serverId
                             + "&flightId=" + flightId
                             + "&userId=" + userId
                             + "&senderTime=" + currentTime;
 
                     restTemplate.postForObject(url, null, String.class);
-                    logService.addLog("INFO", "Đã gửi đồng bộ tới " + peerUrl, currentTime);
                 } catch (Exception e) {
-                    sendToDashboard("ERROR", "Peer Offline: " + peerUrl, currentTime);
+                    sendToDashboard("ERROR", "Node bạn offline: " + peerUrl, currentTime);
                 }
             });
         }
