@@ -20,6 +20,7 @@ import com.ued.distributedsystem.repository.BookingRepository;
 
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(origins = "*")
 public class BookingController {
 
     @Autowired

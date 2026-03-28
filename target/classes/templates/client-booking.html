@@ -6,65 +6,106 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --primary: #0081C9; --secondary: #5BC0F8; --accent: #FFC93C; --bg: #f0f4f8; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; color: #333; }
+        :root { --primary: #0081C9; --secondary: #5BC0F8; --accent: #FFC93C; --bg: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; color: #1e293b; min-height: 100vh; }
         
-        /* Header Blue Section */
-        .header { background: linear-gradient(135deg, #0061ff 0%, #60efff 100%); padding: 60px 20px; text-align: center; color: white; position: relative; }
-        .logo { font-weight: 800; font-size: 2rem; letter-spacing: -1px; margin-bottom: 10px; }
-        .logo span { color: var(--secondary); }
+        /* Fix Header để không bị đè Form */
+        .header { 
+            background: linear-gradient(135deg, #0061ff 0%, #60efff 100%); 
+            padding: 60px 20px 140px 20px; 
+            text-align: center; 
+            color: white; 
+            position: relative; 
+        }
+        .logo { font-weight: 800; font-size: 2.2rem; letter-spacing: -1px; margin-bottom: 5px; }
+        .logo span { color: #fff; opacity: 0.8; }
         
-        /* Dropdown chọn Server ở góc trên */
-        .server-selector { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 50px; backdrop-filter: blur(5px); display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.3); }
-        .server-selector select { background: transparent; border: none; color: white; font-weight: 600; outline: none; cursor: pointer; }
+        /* Dropdown Server Selector */
+        .server-selector { 
+            position: absolute; top: 20px; right: 20px; 
+            background: rgba(255,255,255,0.15); 
+            padding: 8px 15px; border-radius: 50px; 
+            backdrop-filter: blur(8px); 
+            display: flex; align-items: center; gap: 10px; 
+            border: 1px solid rgba(255,255,255,0.2); 
+        }
+        .server-selector select { background: transparent; border: none; color: white; font-weight: 600; outline: none; cursor: pointer; font-size: 0.85rem; }
         .server-selector option { color: #333; }
 
-        /* Form Container */
-        .container { max-width: 800px; margin: -40px auto 40px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); padding: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        /* Form Container - Fix Layout */
+        .container { 
+            max-width: 550px; 
+            margin: -80px auto 40px; 
+            background: white; 
+            border-radius: 16px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
+            padding: 40px; 
+            display: flex; 
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+            z-index: 10;
+        }
         .form-group { display: flex; flex-direction: column; gap: 8px; }
-        label { font-size: 0.85rem; font-weight: 600; color: #64748b; }
-        input { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem; outline: none; transition: 0.2s; }
-        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,129,201,0.1); }
+        label { font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        input { 
+            padding: 14px; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 10px; 
+            font-size: 1rem; 
+            outline: none; 
+            transition: all 0.2s;
+            background: #fdfdfd;
+        }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(0,129,201,0.1); background: #fff; }
         
-        /* Button Section */
-        .full-width { grid-column: span 2; }
-        button { background: #FF6B35; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: 0.3s; margin-top: 10px; width: 100%; }
-        button:hover { background: #e85a2a; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(232,90,42,0.3); }
+        button { 
+            background: #FF6B35; 
+            color: white; 
+            border: none; 
+            padding: 16px; 
+            border-radius: 10px; 
+            font-size: 1rem; 
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: 0.3s; 
+            margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(255,107,53,0.3);
+        }
+        button:hover { background: #e85a2a; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(255,107,53,0.4); }
 
         /* Status Box */
-        #status { grid-column: span 2; padding: 15px; border-radius: 8px; display: none; text-align: center; font-weight: 600; }
-        .success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .loading { background: #f1f5f9; color: #475569; }
+        #status { padding: 15px; border-radius: 10px; display: none; text-align: center; font-weight: 600; font-size: 0.9rem; line-height: 1.5; }
+        .success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .loading { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
     </style>
 </head>
 <body>
 
     <div class="header">
         <div class="server-selector">
-            <span style="font-size: 0.7rem; opacity: 0.8;">KẾT NỐI TỚI:</span>
+            <span style="font-size: 0.7rem; font-weight: 700;">NODE:</span>
             <select id="serverUrl">
-                <option value="https://booking-server-b2fh.onrender.com">Server Dương (Node 1)</option>
-                <option value="https://dien-toan.onrender.com">Server Trâm (Node 2)</option>
-                <option value="https://flight-booking-distributed.onrender.com">Server Nhóm (Node 3)</option>
+                <option value="https://booking-server-b2fh.onrender.com">Dương (Node 1)</option>
+                <option value="https://dien-toan.onrender.com">Trâm (Node 2)</option>
+                <option value="https://flight-booking-distributed.onrender.com">Server Chung (Node 3)</option>
             </select>
         </div>
         <div class="logo">Viet<span>Sky</span></div>
-        <p>Khám phá thế giới cùng VietSky - Hệ thống đặt vé phân tán</p>
+        <p style="opacity: 0.9; font-size: 0.95rem;">Hệ thống đặt vé máy bay phân tán thời gian thực</p>
     </div>
 
     <div class="container">
         <div class="form-group">
-            <label>HỌ VÀ TÊN</label>
-            <input type="text" id="userId" placeholder="Nhập tên khách hàng">
+            <label>Tên khách hàng</label>
+            <input type="text" id="userId" placeholder="VD: Lưu Viễn Dương">
         </div>
         <div class="form-group">
-            <label>CHUYẾN BAY</label>
-            <input type="text" id="flightId" placeholder="VD: VN123 - ĐÀ NẴNG">
+            <label>Mã chuyến bay</label>
+            <input type="text" id="flightId" placeholder="VD: VN123 - ĐÀ NẴNG (DAD)">
         </div>
-        <div class="full-width">
-            <button onclick="sendBooking()">ĐẶT VÉ NGAY</button>
-        </div>
+        <button onclick="sendBooking()">XÁC NHẬN ĐẶT VÉ</button>
         <div id="status"></div>
     </div>
 
@@ -76,19 +117,22 @@
             const statusDiv = document.getElementById('status');
 
             if(!flightId || !userId) {
-                alert("Vui lòng nhập đầy đủ thông tin!");
+                alert("Vui lòng điền đầy đủ Họ tên và Mã chuyến bay!");
                 return;
             }
 
             statusDiv.className = 'loading';
             statusDiv.style.display = 'block';
-            statusDiv.innerText = "Đang gửi yêu cầu đến hệ thống phân tán...";
+            statusDiv.innerHTML = "🔄 Đang gửi yêu cầu đặt vé đến hệ thống...";
 
             try {
-                // Sử dụng JSON Body để khớp với BookingController của Dương
+                // Sử dụng chuẩn JSON Body khớp với BookingController.java
                 const response = await fetch(`${baseUrl}/api/bookings`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({
                         flightId: flightId,
                         userId: userId
@@ -98,13 +142,13 @@
                 if(response.ok) {
                     const resData = await response.json();
                     statusDiv.className = 'success';
-                    statusDiv.innerText = "THÀNH CÔNG: Vé " + flightId + " đã được ghi nhận vào MongoDB Atlas!";
+                    statusDiv.innerHTML = `✅ THÀNH CÔNG!<br>Mã vé: ${flightId}<br>Lamport Clock: ${resData.lamportClock || 'Đã cập nhật'}`;
                 } else {
-                    throw new Error();
+                    throw new Error("Server Error");
                 }
             } catch (err) {
                 statusDiv.className = 'error';
-                statusDiv.innerText = "THẤT BẠI: Node xử lý đang ngoại tuyến!";
+                statusDiv.innerHTML = "❌ THẤT BẠI: Node xử lý đang ngoại tuyến!<br><small>Vui lòng kiểm tra link Render hoặc @CrossOrigin trong Java.</small>";
             }
         }
     </script>
