@@ -20,7 +20,7 @@ import com.ued.distributedsystem.repository.BookingRepository;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "*") // Quan trọng để không bị lỗi "Ngoại tuyến"
 public class BookingController {
 
     @Autowired
@@ -44,27 +44,26 @@ public class BookingController {
     private final ExecutorService executor = Executors.newFixedThreadPool(10);
     private final RestTemplate restTemplate = new RestTemplate();
 
-    /**
-     * HÀM GỬI LOG LÊN DASHBOARD NEON QUA WEBSOCKET
-     */
     private void sendToDashboard(String type, String message, int clock) {
         Map<String, Object> logData = new HashMap<>();
         logData.put("type", type);
         logData.put("message", message);
         logData.put("lamportClock", clock);
-        // Gửi đến topic mà Dashboard đang nghe (Cloud-Server-Duong)
         messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
-    // 1. XỬ LÝ ĐẶT VÉ TỪ CLIENT
-    @PostMapping("/booking")
-    public ResponseEntity<String> handleClientBooking(@RequestParam String flightId, @RequestParam String userId) {
+    // 1. XỬ LÝ ĐẶT VÉ TỪ CLIENT (Đã sửa để nhận JSON Body)
+    @PostMapping("/bookings")
+    public ResponseEntity<Map<String, Object>> handleClientBooking(@RequestBody Map<String, String> payload) {
 
-        // A. Tăng đồng hồ Lamport nội bộ
+        String flightId = payload.get("flightId");
+        String userId = payload.get("userId");
+
+        // A. Tăng đồng hồ Lamport
         int currentTime = lamportClock.tick();
 
-        // B. Gửi Log lên Dashboard ngay lập tức để hiện tia sáng Neon
-        sendToDashboard("BOOKING", "Khách " + userId + " đặt vé chuyến " + flightId, currentTime);
+        // B. Gửi Log lên Dashboard
+        sendToDashboard("BOOKING", "Khách " + userId + " đặt vé: " + flightId, currentTime);
         logService.addLog("BOOKING", "Nhận yêu cầu từ " + userId + ". Flight: " + flightId, currentTime);
 
         try {
@@ -79,13 +78,17 @@ public class BookingController {
             logService.addLog("INFO", "Đã lưu vé lên MongoDB Atlas", currentTime);
         } catch (Exception e) {
             sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), currentTime);
-            logService.addLog("ERROR", "Lỗi lưu DB: " + e.getMessage(), currentTime);
         }
 
         // D. Phát tín hiệu đồng bộ cho các server còn lại
         broadcastSyncMessage(flightId, userId, currentTime);
 
-        return ResponseEntity.ok("Đặt vé thành công! Timestamp: " + currentTime);
+        // Trả về JSON để Frontend nhận diện thành công
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Đặt vé thành công!");
+        response.put("lamportClock", currentTime);
+
+        return ResponseEntity.ok(response);
     }
 
     // 2. XỬ LÝ KHI NHẬN ĐƯỢC TIN ĐỒNG BỘ TỪ SERVER BẠN
@@ -95,11 +98,9 @@ public class BookingController {
             @RequestParam String userId,
             @RequestParam int senderTime) {
 
-        // Cập nhật Lamport Clock theo thuật toán: max(local, remote) + 1
         lamportClock.update(senderTime);
         int newTime = lamportClock.getTime();
 
-        // Hiện tia sáng Sync màu tím trên Dashboard
         sendToDashboard("SYNC", "Nhận đồng bộ từ " + serverOrigin, newTime);
         logService.addLog("SYNC", "Đồng bộ từ " + serverOrigin + " cho khách: " + userId, newTime);
     }
@@ -117,6 +118,7 @@ public class BookingController {
 
             executor.submit(() -> {
                 try {
+                    // Link sync vẫn dùng RequestParam vì nó là server-to-server
                     String url = peerUrl + "/api/sync?serverOrigin=" + serverId
                             + "&flightId=" + flightId
                             + "&userId=" + userId
@@ -125,9 +127,7 @@ public class BookingController {
                     restTemplate.postForObject(url, null, String.class);
                     logService.addLog("INFO", "Đã gửi đồng bộ tới " + peerUrl, currentTime);
                 } catch (Exception e) {
-                    // Nếu máy bạn offline, hiện lỗi lên Dashboard
                     sendToDashboard("ERROR", "Peer Offline: " + peerUrl, currentTime);
-                    logService.addLog("ERROR", "Máy bạn offline: " + peerUrl, currentTime);
                 }
             });
         }
