@@ -1,34 +1,70 @@
 <!DOCTYPE html>
-<html>
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>Booking Client</title>
+    <title>VietSky - Hệ thống đặt vé phân tán</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background: #020617; color: #fff; font-family: sans-serif; padding: 20px; }
-        .container { max-width: 500px; margin: auto; border: 1px solid #00ffff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #00ffff; }
-        select, input { width: 100%; padding: 10px; margin: 10px 0; background: #000; color: #00ffff; border: 1px solid #00ffff; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #00ffff; color: #000; border: none; font-weight: bold; cursor: pointer; }
-        #status { margin-top: 15px; padding: 10px; border-radius: 5px; display: none; text-align: center; }
+        :root { --primary: #0081C9; --secondary: #5BC0F8; --accent: #FFC93C; --bg: #f0f4f8; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; color: #333; }
+        
+        /* Header Blue Section */
+        .header { background: linear-gradient(135deg, #0061ff 0%, #60efff 100%); padding: 60px 20px; text-align: center; color: white; position: relative; }
+        .logo { font-weight: 800; font-size: 2rem; letter-spacing: -1px; margin-bottom: 10px; }
+        .logo span { color: var(--secondary); }
+        
+        /* Dropdown chọn Server ở góc trên */
+        .server-selector { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 50px; backdrop-filter: blur(5px); display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.3); }
+        .server-selector select { background: transparent; border: none; color: white; font-weight: 600; outline: none; cursor: pointer; }
+        .server-selector option { color: #333; }
+
+        /* Form Container */
+        .container { max-width: 800px; margin: -40px auto 40px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); padding: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 0.85rem; font-weight: 600; color: #64748b; }
+        input { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem; outline: none; transition: 0.2s; }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,129,201,0.1); }
+        
+        /* Button Section */
+        .full-width { grid-column: span 2; }
+        button { background: #FF6B35; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: 0.3s; margin-top: 10px; width: 100%; }
+        button:hover { background: #e85a2a; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(232,90,42,0.3); }
+
+        /* Status Box */
+        #status { grid-column: span 2; padding: 15px; border-radius: 8px; display: none; text-align: center; font-weight: 600; }
+        .success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .loading { background: #f1f5f9; color: #475569; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2 style="text-align: center; color: #00ffff;">ĐẶT VÉ MÁY BAY</h2>
-        
-        <label>Chọn Server xử lý:</label>
-        <select id="serverUrl">
-            <option value="https://booking-server-b2fh.onrender.com">Server của Dương (Node 1)</option>
-            <option value="https://flight-booking-app-jwd4.onrender.com">Server bạn A (Node 2)</option>
-            <option value="https://flight-booking-distributed.onrender.com">Server bạn B (Node 3)</option>
-        </select>
 
-        <label>Mã chuyến bay:</label>
-        <input type="text" id="flightId" placeholder="VD: VN123">
-        
-        <label>Tên khách hàng:</label>
-        <input type="text" id="userId" placeholder="Nhập tên của bạn">
-        
-        <button onclick="sendBooking()">XÁC NHẬN ĐẶT VÉ</button>
-        
+    <div class="header">
+        <div class="server-selector">
+            <span style="font-size: 0.7rem; opacity: 0.8;">KẾT NỐI TỚI:</span>
+            <select id="serverUrl">
+                <option value="https://booking-server-b2fh.onrender.com">Server Dương (Node 1)</option>
+                <option value="https://dien-toan.onrender.com">Server Trâm (Node 2)</option>
+                <option value="https://flight-booking-distributed.onrender.com">Server Nhóm (Node 3)</option>
+            </select>
+        </div>
+        <div class="logo">Viet<span>Sky</span></div>
+        <p>Khám phá thế giới cùng VietSky - Hệ thống đặt vé phân tán</p>
+    </div>
+
+    <div class="container">
+        <div class="form-group">
+            <label>HỌ VÀ TÊN</label>
+            <input type="text" id="userId" placeholder="Nhập tên khách hàng">
+        </div>
+        <div class="form-group">
+            <label>CHUYẾN BAY</label>
+            <input type="text" id="flightId" placeholder="VD: VN123 - ĐÀ NẴNG">
+        </div>
+        <div class="full-width">
+            <button onclick="sendBooking()">ĐẶT VÉ NGAY</button>
+        </div>
         <div id="status"></div>
     </div>
 
@@ -44,22 +80,31 @@
                 return;
             }
 
+            statusDiv.className = 'loading';
             statusDiv.style.display = 'block';
-            statusDiv.style.background = '#333';
-            statusDiv.innerText = "Đang gửi yêu cầu...";
+            statusDiv.innerText = "Đang gửi yêu cầu đến hệ thống phân tán...";
 
             try {
-                // Gọi API đến Server đã chọn
-                const response = await fetch(`${baseUrl}/api/booking?flightId=${flightId}&userId=${userId}`, {
-                    method: 'POST'
+                // Sử dụng JSON Body để khớp với BookingController của Dương
+                const response = await fetch(`${baseUrl}/api/bookings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        flightId: flightId,
+                        userId: userId
+                    })
                 });
-                const result = await response.text();
-                
-                statusDiv.style.background = '#065f46';
-                statusDiv.innerText = "THÀNH CÔNG: " + result;
+
+                if(response.ok) {
+                    const resData = await response.json();
+                    statusDiv.className = 'success';
+                    statusDiv.innerText = "THÀNH CÔNG: Vé " + flightId + " đã được ghi nhận vào MongoDB Atlas!";
+                } else {
+                    throw new Error();
+                }
             } catch (err) {
-                statusDiv.style.background = '#991b1b';
-                statusDiv.innerText = "THẤT BẠI: Server này có thể đang tắt!";
+                statusDiv.className = 'error';
+                statusDiv.innerText = "THẤT BẠI: Node xử lý đang ngoại tuyến!";
             }
         }
     </script>
