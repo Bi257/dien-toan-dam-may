@@ -15,7 +15,6 @@ import java.util.concurrent.Executors;
 
 import com.ued.distributedsystem.model.LamportClock;
 import com.ued.distributedsystem.model.Booking;
-import com.ued.distributedsystem.service.LogService;
 import com.ued.distributedsystem.repository.BookingRepository;
 
 @RestController
@@ -41,40 +40,38 @@ public class BookingController {
     private final ExecutorService executor = Executors.newFixedThreadPool(10);
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // HÀM GỬI LOG LÊN DASHBOARD (Đã fix để không bị lặp)
+    // GỬI LOG (Chỉ dùng WebSocket để tránh lặp)
     private void sendToDashboard(String type, String message, int clock) {
         Map<String, Object> logData = new HashMap<>();
         logData.put("type", type);
         logData.put("message", message);
         logData.put("lamportClock", clock);
-        // Quan trọng: Gửi về đúng kênh của Server ID này
         messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
     @PostMapping("/bookings")
     public ResponseEntity<Map<String, Object>> handleClientBooking(@RequestBody Map<String, String> payload) {
-        String flightId = payload.get("flightId");
-        String userId = payload.get("userId");
+        String flightId = payload.getOrDefault("flightId", "FL-999");
+        String userId = payload.getOrDefault("userId", "Khách-Ẩn-Danh");
         int currentTime = lamportClock.tick();
 
-        // 1. Log bắt đầu quy trình
-        sendToDashboard("CLIENT", ">>> [BẮT ĐẦU] Nhận lệnh đặt vé từ: " + userId, currentTime);
+        // LOG 1: Nhận lệnh
+        sendToDashboard("CLIENT", ">>> [BẮT ĐẦU] Nhận lệnh đặt vé từ Client: " + userId, currentTime);
 
         try {
-            // 2. Ghi DB nội bộ trước
-            Booking newBooking = new Booking();
-            newBooking.setPassengerName(userId);
-            newBooking.setFlightId(flightId);
-            newBooking.setLamportTimestamp(currentTime);
-            newBooking.setServerId(serverId);
-            bookingRepository.save(newBooking);
-
-            sendToDashboard("DATABASE", "Ghi log thành công vào MongoDB: DB_" + serverId.split("-")[2], currentTime);
+            // LOG 2: Ghi MongoDB
+            Booking b = new Booking();
+            b.setPassengerName(userId);
+            b.setFlightId(flightId);
+            b.setLamportTimestamp(currentTime);
+            b.setServerId(serverId);
+            bookingRepository.save(b);
+            sendToDashboard("DATABASE", "Ghi log thành công vào MongoDB: Cluster0", currentTime);
         } catch (Exception e) {
             sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), currentTime);
         }
 
-        // 3. Gọi luồng đi tuần qua các server (Sequential Sync)
+        // LOG 3: Bắt đầu đi tuần (Tuần tự)
         broadcastSyncSequential(flightId, userId, currentTime);
 
         Map<String, Object> response = new HashMap<>();
@@ -84,37 +81,29 @@ public class BookingController {
 
     private void broadcastSyncSequential(String flightId, String userId, int currentTime) {
         executor.submit(() -> {
-            sendToDashboard("SYSTEM", "Khởi tạo đồng bộ tới " + peerServers.size() + " Nodes bạn bè...", currentTime);
-
-            int count = 1;
+            int nodeIdx = 1;
             for (String peerUrl : peerServers) {
                 if (peerUrl == null || peerUrl.trim().isEmpty())
                     continue;
-
                 try {
-                    // Hiện log "Đang đi tới..." giống hình 12009d
-                    sendToDashboard("NETWORK", "Đang chuyển dữ liệu tới Node " + count + " [" + peerUrl + "]",
+                    // LOG: Đang ghé thăm node bạn
+                    sendToDashboard("NETWORK", "--- Đang truyền tin tới Node " + nodeIdx + " (" + peerUrl + ")",
                             currentTime);
 
                     String url = peerUrl + "/api/sync?serverOrigin=" + serverId
-                            + "&flightId=" + flightId
-                            + "&userId=" + userId
-                            + "&senderTime=" + currentTime;
+                            + "&flightId=" + flightId + "&userId=" + userId + "&senderTime=" + currentTime;
 
                     restTemplate.postForObject(url, null, String.class);
 
-                    // Hiện log xác nhận đã qua được Node đó
-                    sendToDashboard("SYNC", "Node " + count + " phản hồi: OK (Đã đồng bộ)", currentTime);
-                } catch (Exception e) {
-                    sendToDashboard("ERROR", "Node " + count + " ngoại tuyến. Đang bỏ qua...", currentTime);
-                }
+                    // LOG: Node bạn xác nhận
+                    sendToDashboard("SYNC", "Node " + nodeIdx + " xác nhận: ĐÃ NHẬN", currentTime);
 
-                count++;
-                // Nghỉ 600ms để log trên Dashboard chạy từ từ, không bị dính chùm
-                try {
+                    // NGHỈ ĐỂ THẤY LUỒNG CHẠY
                     Thread.sleep(600);
-                } catch (InterruptedException ignored) {
+                } catch (Exception e) {
+                    sendToDashboard("ERROR", "Node " + nodeIdx + " offline.", currentTime);
                 }
+                nodeIdx++;
             }
             sendToDashboard("SYSTEM", "=== HOÀN TẤT CHU TRÌNH ĐỒNG BỘ ===", currentTime);
         });
@@ -124,20 +113,6 @@ public class BookingController {
     public void handleSyncMessage(@RequestParam String serverOrigin, @RequestParam String flightId,
             @RequestParam String userId, @RequestParam int senderTime) {
         lamportClock.update(senderTime);
-        int newTime = lamportClock.getTime();
-
-        // Server nhận cũng báo log để thấy sự tương tác
-        sendToDashboard("LAMPORT", "TIẾP NHẬN: " + serverOrigin + " đang yêu cầu đồng bộ (Clock: " + senderTime + ")",
-                newTime);
-
-        try {
-            Booking syncBooking = new Booking();
-            syncBooking.setPassengerName(userId);
-            syncBooking.setFlightId(flightId);
-            syncBooking.setLamportTimestamp(senderTime);
-            syncBooking.setServerId(serverOrigin);
-            bookingRepository.save(syncBooking);
-        } catch (Exception ignored) {
-        }
+        sendToDashboard("LAMPORT", "TIẾP NHẬN: Yêu cầu đồng bộ từ " + serverOrigin, lamportClock.getTime());
     }
 }

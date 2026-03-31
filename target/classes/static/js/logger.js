@@ -1,67 +1,49 @@
-let currentFilter = 'ALL';
 let stompClient = null;
-const serverId = document.getElementById('node-id').innerText.trim() || 'Cloud-Server-Duong';
+// Lấy Node ID từ giao diện để biết đang ở máy Dương hay máy Trâm
+const nodeId = document.getElementById('node-id').innerText.trim() || 'Cloud-Server-Duong';
 
 function connectWebSocket() {
     const socket = new SockJS('/ws');
     stompClient = Stomp.over(socket);
-    stompClient.debug = null; // Tắt log debug của stomp cho sạch console
+    stompClient.debug = null; // Tắt debug cho đỡ rối console
 
     stompClient.connect({}, function (frame) {
-        console.log('Connected to WebSocket: ' + frame);
+        console.log('Connected: ' + frame);
         
-        // Subscribe đúng topic của Server này
-        stompClient.subscribe('/topic/logs/' + serverId, function (logUpdate) {
-            const logData = JSON.parse(logUpdate.body);
-            displaySingleLog(logData);
+        // Đăng ký kênh nhận log duy nhất
+        stompClient.subscribe('/topic/logs/' + nodeId, function (sdkEvent) {
+            const logData = JSON.parse(sdkEvent.body);
+            renderLogToScreen(logData);
         });
-    }, function(error) {
-        console.log("WebSocket error, retrying in 5s...");
-        setTimeout(connectWebSocket, 5000);
     });
 }
 
-function displaySingleLog(log) {
+function renderLogToScreen(log) {
     const logDisplay = document.getElementById('log-display');
     const clockDisplay = document.getElementById('clock-val');
-
-    // Cập nhật đồng hồ Lamport trên Dashboard
-    if (log.lamportClock) {
+    
+    // Cập nhật đồng hồ Lamport trung tâm
+    if (log.lamportClock !== undefined) {
         clockDisplay.innerText = log.lamportClock;
     }
 
-    // Áp dụng bộ lọc (Filter)
-    if (currentFilter === 'ALL' || log.type === currentFilter) {
-        const div = document.createElement('div');
-        div.className = `log-entry log-${log.type} new-log-anim`; // Thêm class hiệu ứng nếu có
-        
-        // Định dạng dòng log giống như hình mẫu 12009d
-        const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
-        div.innerHTML = `<span class="log-time">[${time}]</span> 
-                         <span class="log-type">[${log.type}]</span> 
-                         <span class="log-msg">${log.message}</span>`;
-        
-        logDisplay.appendChild(div);
-        
-        // Tự động cuộn xuống cuối
-        logDisplay.scrollTop = logDisplay.scrollHeight;
+    // Tạo dòng log mới
+    const div = document.createElement('div');
+    div.className = `log-entry log-${log.type}`;
+    
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString('en-GB', { hour12: false });
 
-        // Giới hạn số lượng dòng hiển thị để tránh lag (ví dụ giữ 50 dòng mới nhất)
-        if (logDisplay.childNodes.length > 50) {
-            logDisplay.removeChild(logDisplay.firstChild);
-        }
-    }
+    // Cấu trúc log giống hệt hình 12009d
+    div.innerHTML = `<span class="log-time">[${timestamp}]</span> 
+                     <span class="log-type">[${log.type}]</span> 
+                     <span class="log-msg">${log.message}</span>`;
+    
+    logDisplay.appendChild(div);
+    
+    // Luôn cuộn xuống dòng mới nhất
+    logDisplay.scrollTop = logDisplay.scrollHeight;
 }
 
-function filterLogs(filter) {
-    currentFilter = filter;
-    // Xóa màn hình khi đổi filter để lọc lại từ đầu nếu muốn, hoặc cứ giữ nguyên
-    document.querySelectorAll('.btn-filter').forEach(btn => {
-        btn.classList.toggle('active', btn.innerText === filter);
-    });
-}
-
-// Khởi tạo kết nối khi load trang
-document.addEventListener('DOMContentLoaded', () => {
-    connectWebSocket();
-});
+// Chạy ngay khi trang web sẵn sàng
+document.addEventListener('DOMContentLoaded', connectWebSocket);
