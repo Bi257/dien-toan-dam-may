@@ -3,6 +3,7 @@
 <head>
     <title>VietSky | Cluster Dashboard</title>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com;">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -14,6 +15,7 @@
             --accent-err: #fb7185;
             --accent-db: #4ade80;
             --accent-sys: #a78bfa;
+            --accent-lamport: #fbbf24;
         }
 
         body {
@@ -22,45 +24,45 @@
             color: var(--text-main);
             margin: 0;
             padding: 20px;
-            overflow-y: hidden; /* Chỉ cuộn trong các cột log */
+            overflow-y: hidden;
         }
 
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 20px;
+            padding-bottom: 15px;
             border-bottom: 1px solid #334155;
             margin-bottom: 20px;
         }
 
-        .logo { font-weight: 800; font-size: 1.5rem; color: var(--primary); }
-        .node-info { font-size: 0.9rem; opacity: 0.7; }
+        .logo { font-weight: 800; font-size: 1.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+        .logo span { color: #fff; font-weight: 400; font-size: 1rem; margin-left: 5px; }
 
-        /* Container chính chứa các cột */
         #log-columns-container {
             display: flex;
             gap: 20px;
             height: calc(100vh - 120px);
             overflow-x: auto;
             padding-bottom: 10px;
+            align-items: flex-start;
         }
 
-        /* Từng cột Log của mỗi Server */
         .log-column {
-            min-width: 350px;
-            max-width: 350px;
+            min-width: 360px;
+            max-width: 360px;
+            height: 100%;
             background: var(--card-bg);
             border-radius: 12px;
             display: flex;
             flex-direction: column;
             border: 1px solid #334155;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
         }
 
         .node-header {
             padding: 15px;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.03);
             border-bottom: 1px solid #334155;
             border-radius: 12px 12px 0 0;
             display: flex;
@@ -68,58 +70,66 @@
             align-items: center;
         }
 
-        .node-header h3 { margin: 0; font-size: 1rem; color: var(--primary); }
+        .node-header h3 { margin: 0; font-size: 0.95rem; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
 
         .status-indicator {
-            font-size: 0.75rem;
-            padding: 4px 8px;
+            font-size: 0.7rem;
+            padding: 3px 10px;
             border-radius: 20px;
             background: #064e3b;
             color: #4ade80;
-            font-weight: 600;
+            font-weight: 700;
+            text-transform: uppercase;
         }
 
-        /* Danh sách Log có thể cuộn */
         .log-list {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
+            padding: 12px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column-reverse; /* Log mới hiện ở dưới cùng và tự cuộn */
         }
 
-        /* Style từng dòng Log */
         .log-entry {
-            margin-bottom: 8px;
-            padding: 8px;
-            border-left: 3px solid #64748b;
-            background: rgba(255, 255, 255, 0.02);
+            margin-bottom: 6px;
+            padding: 10px;
+            border-left: 3px solid #475569;
+            background: rgba(0, 0, 0, 0.2);
             border-radius: 4px;
-            animation: fadeIn 0.3s ease;
+            line-height: 1.4;
+            animation: slideIn 0.2s ease-out;
         }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
 
-        .clock { color: var(--primary); font-weight: bold; margin-right: 5px; }
+        .clock-badge {
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent-lamport);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 6px;
+        }
 
-        /* Màu sắc theo Type */
+        /* Màu sắc log theo Type */
         .type-sync { border-left-color: var(--accent-sync); color: #bae6fd; }
-        .type-error { border-left-color: var(--accent-err); background: rgba(251, 113, 133, 0.1); color: #fecdd3; }
+        .type-error { border-left-color: var(--accent-err); background: rgba(251, 113, 133, 0.05); color: #fecdd3; }
         .type-database { border-left-color: var(--accent-db); color: #bbf7d0; }
-        .type-system { border-left-color: var(--accent-sys); color: #ddd6fe; }
+        .type-system { border-left-color: var(--accent-sys); color: #ddd6fe; opacity: 0.8; }
+        .type-network { border-left-color: #64748b; color: #cbd5e1; font-style: italic; }
 
-        /* Tùy chỉnh thanh cuộn */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div class="logo">VIETSKY <span>Dashboard</span></div>
+        <div class="logo">VietSky <span>Distributed System Log Monitor</span></div>
         <div class="node-info">
-            Đang giám sát Cluster: <strong th:text="${serverId}">Server-Duong</strong>
+            Monitor ID: <code th:text="${serverId}" style="color: var(--primary)">Server-Dương</code>
         </div>
     </div>
 
@@ -130,53 +140,91 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
     
     <script>
+        // 1. Khởi tạo kết nối WebSocket
         const socket = new SockJS('/ws');
         const stompClient = Stomp.over(socket);
+        stompClient.debug = null; // Tắt log debug của stomp để console sạch hơn
 
         stompClient.connect({}, function (frame) {
-            console.log('Connected: ' + frame);
+            console.log('Connected to Cluster WebSocket');
+            
+            // Lắng nghe tất cả các log từ Cluster
             stompClient.subscribe('/topic/logs/all', function (logOutput) {
-                const log = JSON.parse(logOutput.body);
-                displayLog(log);
+                const logData = JSON.parse(logOutput.body);
+                displayLog(logData);
             });
+
+            // 2. Tự động lấy danh sách Node hiện có để vẽ cột ngay lập tức
+            fetchNodes();
         });
 
-        function displayLog(log) {
+        function fetchNodes() {
+            fetch('/api/servers/list')
+                .then(res => res.json())
+                .then(nodes => {
+                    nodes.forEach(nodeName => {
+                        // Tạo cột trống cho từng node (xóa phần "(Máy này)" nếu có)
+                        const cleanName = nodeName.split(' ')[0].replace('http://', '').replace(':8080', '');
+                        ensureColumnExists(cleanName);
+                    });
+                })
+                .catch(err => console.warn("Không thể tải danh sách Node ban đầu"));
+        }
+
+        function ensureColumnExists(nodeId) {
             const container = document.getElementById('log-columns-container');
-            let nodeCol = document.getElementById(`col-${log.nodeId}`);
+            let nodeCol = document.getElementById(`col-${nodeId}`);
 
             if (!nodeCol) {
                 nodeCol = document.createElement('div');
-                nodeCol.id = `col-${log.nodeId}`;
+                nodeCol.id = `col-${nodeId}`;
                 nodeCol.className = 'log-column';
                 nodeCol.innerHTML = `
                     <div class="node-header">
-                        <h3>Node: ${log.nodeId}</h3>
-                        <span class="status-indicator" id="status-${log.nodeId}">Online</span>
+                        <h3>Node: ${nodeId}</h3>
+                        <span class="status-indicator" id="status-${nodeId}">Active</span>
                     </div>
-                    <div class="log-list" id="list-${log.nodeId}"></div>
+                    <div class="log-list" id="list-${nodeId}"></div>
                 `;
                 container.appendChild(nodeCol);
             }
+            return nodeCol;
+        }
 
-            // Cập nhật trạng thái nếu có lỗi
-            const statusIndicator = document.getElementById(`status-${log.nodeId}`);
-            if (log.type === 'ERROR') {
-                statusIndicator.innerText = "Offline/Warning";
-                statusIndicator.style.background = "#4c0519";
-                statusIndicator.style.color = "#fb7185";
-            }
+        function displayLog(log) {
+            // Đảm bảo cột tồn tại trước khi chèn log
+            ensureColumnExists(log.nodeId);
 
             const logList = document.getElementById(`list-${log.nodeId}`);
+            const statusIndicator = document.getElementById(`status-${log.nodeId}`);
+
+            // Cập nhật trạng thái Node nếu gặp lỗi
+            if (log.type === 'ERROR') {
+                statusIndicator.innerText = "Warning/Offline";
+                statusIndicator.style.background = "#4c0519";
+                statusIndicator.style.color = "#fb7185";
+            } else {
+                statusIndicator.innerText = "Active";
+                statusIndicator.style.background = "#064e3b";
+                statusIndicator.style.color = "#4ade80";
+            }
+
             const entry = document.createElement('div');
             entry.className = `log-entry type-${log.type.toLowerCase()}`;
+            
+            // Cấu trúc nội dung Log
             entry.innerHTML = `
-                <span class="clock">[T:${log.lamportClock}]</span>
-                <span>${log.message}</span>
+                <div>
+                    <span class="clock-badge">L:${log.lamportClock}</span>
+                    <strong style="font-size: 0.7rem; opacity: 0.6;">[${log.type}]</strong>
+                </div>
+                <div style="margin-top: 4px;">${log.message}</div>
             `;
 
-            // Thêm vào đầu danh sách (mới nhất lên trên)
-            logList.insertBefore(entry, logList.firstChild);
+            logList.appendChild(entry);
+            
+            // Tự động cuộn xuống log mới nhất
+            logList.scrollTop = logList.scrollHeight;
         }
     </script>
 </body>
