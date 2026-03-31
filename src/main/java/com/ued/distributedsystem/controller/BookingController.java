@@ -6,8 +6,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 import java.util.*;
 import java.util.concurrent.Executors;
+
 import com.ued.distributedsystem.model.LamportClock;
 import com.ued.distributedsystem.model.Booking;
 import com.ued.distributedsystem.repository.BookingRepository;
@@ -36,45 +38,57 @@ public class BookingController {
         logData.put("type", type);
         logData.put("message", message);
         logData.put("lamportClock", clock);
-        logData.put("nodeId", serverId);
         messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
     @PostMapping("/bookings")
     public ResponseEntity<?> handleBooking(@RequestBody Map<String, String> payload) {
-        String user = payload.getOrDefault("userId", "User-Unknown");
+        String user = payload.getOrDefault("userId", "Khách-Hàng");
+        String flight = payload.getOrDefault("flightId", "FL-999");
         int time = lamportClock.tick();
 
-        sendToDashboard("CLIENT", ">>> [BẮT ĐẦU] Nhận yêu cầu đặt vé từ: " + user, time);
+        // LOG 1: Nhận lệnh từ Client
+        sendToDashboard("CLIENT", ">>> [BẮT ĐẦU] Nhận lệnh đặt vé từ: " + user, time);
 
-        // Lưu DB nội bộ
         try {
-            Booking b = new Booking(user, payload.get("flightId"), time, serverId);
+            // LOG 2: Ghi MongoDB (Dùng SET để tránh lỗi Constructor)
+            Booking b = new Booking();
+            b.setPassengerName(user);
+            b.setFlightId(flight);
+            b.setLamportTimestamp(time);
+            b.setServerId(serverId);
             bookingRepository.save(b);
-            sendToDashboard("DATABASE", "Đã ghi nhận giao dịch vào MongoDB Cluster0", time);
+            sendToDashboard("DATABASE", "Đã lưu giao dịch vào MongoDB Cluster0", time);
         } catch (Exception e) {
             sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), time);
         }
 
-        // Kích hoạt luồng đi tuần tự qua các Node
+        // LOG 3: Chạy luồng đi tuần qua từng Server bạn
         Executors.newSingleThreadExecutor().submit(() -> {
             int idx = 1;
             for (String peer : peerServers) {
-                if (peer == null || peer.isEmpty())
+                if (peer == null || peer.trim().isEmpty())
                     continue;
                 try {
-                    sendToDashboard("NETWORK", "Đang truyền gói tin tới Node " + idx + " [" + peer + "]", time);
-                    restTemplate.postForObject(
-                            peer + "/api/sync?serverOrigin=" + serverId + "&userId=" + user + "&senderTime=" + time,
-                            null, String.class);
-                    sendToDashboard("SYNC", "Node " + idx + " xác nhận: ĐỒNG BỘ HOÀN TẤT", time);
-                    Thread.sleep(700); // Nghỉ để Dashboard kịp hiển thị luồng đi
+                    // Thông báo chuẩn bị gửi
+                    sendToDashboard("NETWORK", "--- Đang chuyển dữ liệu tới Node " + idx + " [" + peer + "]", time);
+
+                    String url = peer + "/api/sync?serverOrigin=" + serverId
+                            + "&flightId=" + flight + "&userId=" + user + "&senderTime=" + time;
+
+                    restTemplate.postForObject(url, null, String.class);
+
+                    // Thông báo đã gửi xong
+                    sendToDashboard("SYNC", "Node " + idx + " phản hồi: OK (Đã đồng bộ)", time);
+
+                    // NGHỈ ĐỂ THẤY LUỒNG CHẠY TRÊN DASHBOARD
+                    Thread.sleep(800);
                 } catch (Exception e) {
-                    sendToDashboard("ERROR", "Node " + idx + " mất kết nối.", time);
+                    sendToDashboard("ERROR", "Node " + idx + " KHÔNG PHẢN HỒI (Offline)", time);
                 }
                 idx++;
             }
-            sendToDashboard("SYSTEM", "=== KẾT THÚC CHU TRÌNH HỆ PHÂN TÁN ===", time);
+            sendToDashboard("SYSTEM", "=== KẾT THÚC QUY TRÌNH ĐỒNG BỘ HỆ PHÂN TÁN ===", time);
         });
 
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
@@ -83,6 +97,6 @@ public class BookingController {
     @PostMapping("/sync")
     public void handleSync(@RequestParam String serverOrigin, @RequestParam int senderTime) {
         lamportClock.update(senderTime);
-        sendToDashboard("LAMPORT", "TIẾP NHẬN: Yêu cầu đồng bộ từ " + serverOrigin, lamportClock.getTime());
+        sendToDashboard("LAMPORT", "TIẾP NHẬN: Yêu cầu đồng bộ từ [" + serverOrigin + "]", lamportClock.getTime());
     }
 }

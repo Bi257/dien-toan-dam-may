@@ -9,10 +9,12 @@ public class Booking {
     private String id;
     private String passengerName;
     private String flightId;
-    private int lamportTimestamp; // Đổi sang int cho khớp với LamportClock của bạn
+    private int lamportTimestamp;
     private String serverId;
 
-    // --- GETTER & SETTER (Phần thiếu dẫn đến lỗi của bạn) ---
+    // Constructor mặc định (Bắt buộc cho MongoDB)
+    public Booking() {
+    }
 
     public String getId() {
         return id;
