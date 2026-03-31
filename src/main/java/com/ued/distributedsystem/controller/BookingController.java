@@ -6,13 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-
-import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
+import java.util.*;
 import java.util.concurrent.Executors;
-
 import com.ued.distributedsystem.model.LamportClock;
 import com.ued.distributedsystem.model.Booking;
 import com.ued.distributedsystem.repository.BookingRepository;
@@ -24,94 +19,69 @@ public class BookingController {
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
-
     @Autowired
     private LamportClock lamportClock;
-
     @Autowired
     private BookingRepository bookingRepository;
 
     @Value("#{'${peer.servers}'.split(',')}")
     private List<String> peerServers;
-
     @Value("${server.id:Cloud-Server-Duong}")
     private String serverId;
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(10);
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // GỬI LOG (Chỉ dùng WebSocket để tránh lặp)
     private void sendToDashboard(String type, String message, int clock) {
         Map<String, Object> logData = new HashMap<>();
         logData.put("type", type);
         logData.put("message", message);
         logData.put("lamportClock", clock);
+        logData.put("nodeId", serverId);
         messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
     @PostMapping("/bookings")
-    public ResponseEntity<Map<String, Object>> handleClientBooking(@RequestBody Map<String, String> payload) {
-        String flightId = payload.getOrDefault("flightId", "FL-999");
-        String userId = payload.getOrDefault("userId", "Khách-Ẩn-Danh");
-        int currentTime = lamportClock.tick();
+    public ResponseEntity<?> handleBooking(@RequestBody Map<String, String> payload) {
+        String user = payload.getOrDefault("userId", "User-Unknown");
+        int time = lamportClock.tick();
 
-        // LOG 1: Nhận lệnh
-        sendToDashboard("CLIENT", ">>> [BẮT ĐẦU] Nhận lệnh đặt vé từ Client: " + userId, currentTime);
+        sendToDashboard("CLIENT", ">>> [BẮT ĐẦU] Nhận yêu cầu đặt vé từ: " + user, time);
 
+        // Lưu DB nội bộ
         try {
-            // LOG 2: Ghi MongoDB
-            Booking b = new Booking();
-            b.setPassengerName(userId);
-            b.setFlightId(flightId);
-            b.setLamportTimestamp(currentTime);
-            b.setServerId(serverId);
+            Booking b = new Booking(user, payload.get("flightId"), time, serverId);
             bookingRepository.save(b);
-            sendToDashboard("DATABASE", "Ghi log thành công vào MongoDB: Cluster0", currentTime);
+            sendToDashboard("DATABASE", "Đã ghi nhận giao dịch vào MongoDB Cluster0", time);
         } catch (Exception e) {
-            sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), currentTime);
+            sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), time);
         }
 
-        // LOG 3: Bắt đầu đi tuần (Tuần tự)
-        broadcastSyncSequential(flightId, userId, currentTime);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", "SUCCESS");
-        return ResponseEntity.ok(response);
-    }
-
-    private void broadcastSyncSequential(String flightId, String userId, int currentTime) {
-        executor.submit(() -> {
-            int nodeIdx = 1;
-            for (String peerUrl : peerServers) {
-                if (peerUrl == null || peerUrl.trim().isEmpty())
+        // Kích hoạt luồng đi tuần tự qua các Node
+        Executors.newSingleThreadExecutor().submit(() -> {
+            int idx = 1;
+            for (String peer : peerServers) {
+                if (peer == null || peer.isEmpty())
                     continue;
                 try {
-                    // LOG: Đang ghé thăm node bạn
-                    sendToDashboard("NETWORK", "--- Đang truyền tin tới Node " + nodeIdx + " (" + peerUrl + ")",
-                            currentTime);
-
-                    String url = peerUrl + "/api/sync?serverOrigin=" + serverId
-                            + "&flightId=" + flightId + "&userId=" + userId + "&senderTime=" + currentTime;
-
-                    restTemplate.postForObject(url, null, String.class);
-
-                    // LOG: Node bạn xác nhận
-                    sendToDashboard("SYNC", "Node " + nodeIdx + " xác nhận: ĐÃ NHẬN", currentTime);
-
-                    // NGHỈ ĐỂ THẤY LUỒNG CHẠY
-                    Thread.sleep(600);
+                    sendToDashboard("NETWORK", "Đang truyền gói tin tới Node " + idx + " [" + peer + "]", time);
+                    restTemplate.postForObject(
+                            peer + "/api/sync?serverOrigin=" + serverId + "&userId=" + user + "&senderTime=" + time,
+                            null, String.class);
+                    sendToDashboard("SYNC", "Node " + idx + " xác nhận: ĐỒNG BỘ HOÀN TẤT", time);
+                    Thread.sleep(700); // Nghỉ để Dashboard kịp hiển thị luồng đi
                 } catch (Exception e) {
-                    sendToDashboard("ERROR", "Node " + nodeIdx + " offline.", currentTime);
+                    sendToDashboard("ERROR", "Node " + idx + " mất kết nối.", time);
                 }
-                nodeIdx++;
+                idx++;
             }
-            sendToDashboard("SYSTEM", "=== HOÀN TẤT CHU TRÌNH ĐỒNG BỘ ===", currentTime);
+            sendToDashboard("SYSTEM", "=== KẾT THÚC CHU TRÌNH HỆ PHÂN TÁN ===", time);
         });
+
+        return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
 
     @PostMapping("/sync")
-    public void handleSyncMessage(@RequestParam String serverOrigin, @RequestParam String flightId,
-            @RequestParam String userId, @RequestParam int senderTime) {
+    public void handleSync(@RequestParam String serverOrigin, @RequestParam int senderTime) {
         lamportClock.update(senderTime);
         sendToDashboard("LAMPORT", "TIẾP NHẬN: Yêu cầu đồng bộ từ " + serverOrigin, lamportClock.getTime());
     }

@@ -1,49 +1,46 @@
 let stompClient = null;
-// Lấy Node ID từ giao diện để biết đang ở máy Dương hay máy Trâm
-const nodeId = document.getElementById('node-id').innerText.trim() || 'Cloud-Server-Duong';
+const myNodeId = document.getElementById('node-id').innerText.trim();
 
-function connectWebSocket() {
+function connect() {
     const socket = new SockJS('/ws');
     stompClient = Stomp.over(socket);
-    stompClient.debug = null; // Tắt debug cho đỡ rối console
+    stompClient.debug = null;
 
     stompClient.connect({}, function (frame) {
-        console.log('Connected: ' + frame);
-        
-        // Đăng ký kênh nhận log duy nhất
-        stompClient.subscribe('/topic/logs/' + nodeId, function (sdkEvent) {
-            const logData = JSON.parse(sdkEvent.body);
-            renderLogToScreen(logData);
+        stompClient.subscribe('/topic/logs/' + myNodeId, function (response) {
+            const log = JSON.parse(response.body);
+            appendLog(log);
+            updateNodeVisuals(log);
         });
     });
 }
 
-function renderLogToScreen(log) {
-    const logDisplay = document.getElementById('log-display');
-    const clockDisplay = document.getElementById('clock-val');
+function appendLog(log) {
+    const container = document.getElementById('log-display');
+    const row = document.createElement('div');
+    row.className = `log-row log-${log.type}`;
     
-    // Cập nhật đồng hồ Lamport trung tâm
-    if (log.lamportClock !== undefined) {
-        clockDisplay.innerText = log.lamportClock;
-    }
-
-    // Tạo dòng log mới
-    const div = document.createElement('div');
-    div.className = `log-entry log-${log.type}`;
+    const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
     
-    const now = new Date();
-    const timestamp = now.toLocaleTimeString('en-GB', { hour12: false });
-
-    // Cấu trúc log giống hệt hình 12009d
-    div.innerHTML = `<span class="log-time">[${timestamp}]</span> 
-                     <span class="log-type">[${log.type}]</span> 
-                     <span class="log-msg">${log.message}</span>`;
+    // Chia log thành 3 cột rõ ràng: TIME | TYPE | MESSAGE
+    row.innerHTML = `
+        <div class="col-time">[${time}]</div>
+        <div class="col-type">[${log.type}]</div>
+        <div class="col-msg">${log.message}</div>
+    `;
     
-    logDisplay.appendChild(div);
+    container.appendChild(row);
+    container.scrollTop = container.scrollHeight;
     
-    // Luôn cuộn xuống dòng mới nhất
-    logDisplay.scrollTop = logDisplay.scrollHeight;
+    if(log.lamportClock) document.getElementById('clock-val').innerText = log.lamportClock;
 }
 
-// Chạy ngay khi trang web sẵn sàng
-document.addEventListener('DOMContentLoaded', connectWebSocket);
+function updateNodeVisuals(log) {
+    // Hiệu ứng chớp đèn khi dữ liệu đi qua từng máy
+    if (log.message.includes("Node 1")) {
+        const dot = document.getElementById('dot-1');
+        dot.style.background = (log.type === 'SYNC') ? '#00ff00' : '#ffcc00';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', connect);
