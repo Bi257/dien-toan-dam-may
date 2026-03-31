@@ -20,7 +20,7 @@ import com.ued.distributedsystem.repository.BookingRepository;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // Fix lỗi "Node ngoại tuyến" do chặn CORS
+@CrossOrigin(origins = "*")
 public class BookingController {
 
     @Autowired
@@ -55,23 +55,23 @@ public class BookingController {
         messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
-    // 1. XỬ LÝ ĐẶT VÉ TỪ CLIENT (Dùng @RequestBody để nhận JSON, fix lỗi undefined)
+    // 1. XỬ LÝ ĐẶT VÉ TỪ CLIENT
     @PostMapping("/bookings")
     public ResponseEntity<Map<String, Object>> handleClientBooking(@RequestBody Map<String, String> payload) {
-
-        // Bóc dữ liệu từ JSON Body
         String flightId = payload.get("flightId");
         String userId = payload.get("userId");
 
-        // Tăng đồng hồ Lamport
         int currentTime = lamportClock.tick();
 
-        // Gửi Log - Hết lỗi undefined vì đã có dữ liệu từ payload
-        sendToDashboard("BOOKING", "XÁC NHẬN: Khách [" + userId + "] đặt vé " + flightId, currentTime);
-        logService.addLog("BOOKING", "Nhận yêu cầu từ " + userId + ". Flight: " + flightId, currentTime);
+        // LOG 1: Nhận lệnh từ App
+        sendToDashboard("CLIENT", "Nhận lệnh ĐẶT VÉ [" + flightId + "] từ Client: " + userId, currentTime);
+        logService.addLog("CLIENT", "Request từ " + userId, currentTime);
 
         try {
-            // Lưu vào MongoDB Atlas
+            // LOG 2: Ghi vào DB nội bộ
+            String dbName = "DB_" + serverId.replace("Cloud-Server-", "");
+            sendToDashboard("DATABASE", "Đang kết nối và ghi vào: " + dbName, currentTime);
+
             Booking newBooking = new Booking();
             newBooking.setPassengerName(userId);
             newBooking.setFlightId(flightId);
@@ -79,15 +79,15 @@ public class BookingController {
             newBooking.setServerId(serverId);
 
             bookingRepository.save(newBooking);
-            logService.addLog("INFO", "Ghi transaction vào MongoDB Cluster0", currentTime);
+            sendToDashboard("DATABASE", "Ghi transaction THÀNH CÔNG vào " + dbName, currentTime);
         } catch (Exception e) {
-            sendToDashboard("ERROR", "Lỗi DB: " + e.getMessage(), currentTime);
+            sendToDashboard("ERROR", "Lỗi ghi DB: " + e.getMessage(), currentTime);
         }
 
-        // Phát tín hiệu đồng bộ cho các server khác (Node Trâm, Node Chung...)
+        // LOG 3: Bắt đầu giai đoạn đồng bộ
+        sendToDashboard("TRANSACTION", "BẮT ĐẦU quy trình đồng bộ liên Server...", currentTime);
         broadcastSyncMessage(flightId, userId, currentTime);
 
-        // Trả về kết quả cho Frontend
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Thành công");
         response.put("lamportClock", currentTime);
@@ -105,8 +105,21 @@ public class BookingController {
         lamportClock.update(senderTime);
         int newTime = lamportClock.getTime();
 
-        sendToDashboard("SYNC", "Nhận đồng bộ từ " + serverOrigin, newTime);
-        logService.addLog("SYNC", "Đồng bộ Clock (L_max + 1) từ " + serverOrigin, newTime);
+        // LOG: Hiện rõ server nào gửi và quá trình lưu DB đồng bộ
+        sendToDashboard("LAMPORT", "Nhận tín hiệu SYNC từ " + serverOrigin + " (Clock: " + senderTime + ")", newTime);
+
+        try {
+            Booking syncBooking = new Booking();
+            syncBooking.setPassengerName(userId);
+            syncBooking.setFlightId(flightId);
+            syncBooking.setLamportTimestamp(senderTime);
+            syncBooking.setServerId(serverOrigin);
+            bookingRepository.save(syncBooking);
+
+            sendToDashboard("DATABASE", "Đã đồng bộ vé [" + flightId + "] vào DB nội bộ từ " + serverOrigin, newTime);
+        } catch (Exception e) {
+            sendToDashboard("ERROR", "Lỗi đồng bộ DB: " + e.getMessage(), newTime);
+        }
     }
 
     @GetMapping("/logs/private-view")
@@ -114,22 +127,30 @@ public class BookingController {
         return logService.getAllLogs();
     }
 
-    // 3. BROADCAST
+    // 3. BROADCAST (Gửi đi kèm Log từng Node)
     private void broadcastSyncMessage(String flightId, String userId, int currentTime) {
+        int nodeIndex = 1;
         for (String peerUrl : peerServers) {
             if (peerUrl == null || peerUrl.trim().isEmpty())
                 continue;
 
+            final int index = nodeIndex++;
             executor.submit(() -> {
                 try {
+                    // LOG: Trạng thái gửi
+                    sendToDashboard("NETWORK", "Đang truyền tin tới Node " + index + " (" + peerUrl + ")", currentTime);
+
                     String url = peerUrl + "/api/sync?serverOrigin=" + serverId
                             + "&flightId=" + flightId
                             + "&userId=" + userId
                             + "&senderTime=" + currentTime;
 
                     restTemplate.postForObject(url, null, String.class);
+
+                    // LOG: Xác nhận phản hồi
+                    sendToDashboard("SYNC", "Node " + index + " phản hồi: ĐÃ NHẬN", currentTime);
                 } catch (Exception e) {
-                    sendToDashboard("ERROR", "Node bạn offline: " + peerUrl, currentTime);
+                    sendToDashboard("ERROR", "Node " + index + " KHÔNG PHẢN HỒI (Offline)", currentTime);
                 }
             });
         }
