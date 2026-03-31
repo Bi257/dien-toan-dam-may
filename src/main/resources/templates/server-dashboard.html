@@ -1,26 +1,59 @@
-<div class="dashboard-wrapper">
-    <div class="nodes-panel">
-        <h4 class="panel-title">NETWORK TOPOLOGY</h4>
-        <div class="node-card active" id="node-self">
-            <div class="status-indicator online"></div>
-            <div class="node-info">
-                <span class="node-id" id="node-id">Cloud-Server-Duong</span>
-                <span class="node-status">MASTER NODE (ONLINE)</span>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Giám Sát Server</title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+    <h1 class="main-title">Dashboard giám sát các server trong hệ phân tán</h1>
+
+    <div class="top-section">
+        <div class="panel topology-panel">
+            <h2>Sơ đồ các server</h2>
+            <div class="stats">
+                <div>Server online<br><b>3/3</b></div>
+                <div>Trạng thái<br><b id="sys-status">Đang hoạt động</b></div>
+            </div>
+            
+            <div class="ring-container">
+                <div class="center-circle">RING</div>
+                <div class="node node-top active" id="node-master">Dương</div>
+                <div class="node node-right" id="node-tram">Trâm</div>
+                <div class="node node-left" id="node-chung">Chung</div>
+            </div>
+
+            <div class="legend">
+                <span class="legend-item"><span class="box box-orange"></span> Server đang chọn</span>
+                <span class="legend-item"><span class="box box-green"></span> Đang hoạt động</span>
             </div>
         </div>
-        <div class="node-card" id="card-node-1">
-            <div class="status-indicator" id="dot-1"></div>
-            <div class="node-info"><span>Node 01 (Tram)</span></div>
+
+        <div class="panel control-panel">
+            <h2>Điều khiển màn hình giám sát</h2>
+            <div class="controls">
+                <label>Chọn server:</label>
+                <select id="server-select" onchange="changeServerView()">
+                    <option value="Cloud-Server-Duong">Server Dương (Master)</option>
+                    <option value="Node-01-Tram">Server Trâm</option>
+                    <option value="Node-02-Chung">Server Chung</option>
+                </select>
+                <button class="btn-refresh" onclick="clearLogs()">Làm mới Dashboard</button>
+                <label><input type="checkbox" checked> Tự động cập nhật Real-time</label>
+            </div>
+
+            <h2 style="margin-top: 20px;">Log chi tiết theo server đang chọn</h2>
+            <div id="specific-log-display" class="log-box small-log"></div>
         </div>
-        <div class="node-card" id="card-node-2">
-            <div class="status-indicator" id="dot-2"></div>
-            <div class="node-info"><span>Node 02 (Chung)</span></div>
-        </div>
-        <div class="clock-display">CLOCK: <span id="clock-val">0</span></div>
     </div>
 
-    <div class="log-panel">
-        <div class="terminal-header">REAL-TIME TRAFFIC MONITOR</div>
-        <div id="log-display" class="log-container"></div>
+    <div class="bottom-section panel">
+        <h2>Dòng log tổng hợp của toàn hệ thống</h2>
+        <div id="global-log-display" class="log-box large-log"></div>
     </div>
-</div>
+
+    <script src="/js/logger.js"></script>
+</body>
+</html>
