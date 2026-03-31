@@ -1,59 +1,183 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
+    <title>VietSky | Cluster Dashboard</title>
     <meta charset="UTF-8">
-    <title>Dashboard Giám Sát Server</title>
-    <link rel="stylesheet" href="/css/dashboard.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f1f5f9;
+            --primary: #38bdf8;
+            --accent-sync: #22d3ee;
+            --accent-err: #fb7185;
+            --accent-db: #4ade80;
+            --accent-sys: #a78bfa;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            overflow-y: hidden; /* Chỉ cuộn trong các cột log */
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 20px;
+        }
+
+        .logo { font-weight: 800; font-size: 1.5rem; color: var(--primary); }
+        .node-info { font-size: 0.9rem; opacity: 0.7; }
+
+        /* Container chính chứa các cột */
+        #log-columns-container {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 120px);
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        /* Từng cột Log của mỗi Server */
+        .log-column {
+            min-width: 350px;
+            max-width: 350px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #334155;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .node-header {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid #334155;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .node-header h3 { margin: 0; font-size: 1rem; color: var(--primary); }
+
+        .status-indicator {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 20px;
+            background: #064e3b;
+            color: #4ade80;
+            font-weight: 600;
+        }
+
+        /* Danh sách Log có thể cuộn */
+        .log-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        /* Style từng dòng Log */
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-left: 3px solid #64748b;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 4px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .clock { color: var(--primary); font-weight: bold; margin-right: 5px; }
+
+        /* Màu sắc theo Type */
+        .type-sync { border-left-color: var(--accent-sync); color: #bae6fd; }
+        .type-error { border-left-color: var(--accent-err); background: rgba(251, 113, 133, 0.1); color: #fecdd3; }
+        .type-database { border-left-color: var(--accent-db); color: #bbf7d0; }
+        .type-system { border-left-color: var(--accent-sys); color: #ddd6fe; }
+
+        /* Tùy chỉnh thanh cuộn */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+    </style>
 </head>
 <body>
-    <h1 class="main-title">Dashboard giám sát các server trong hệ phân tán</h1>
 
-    <div class="top-section">
-        <div class="panel topology-panel">
-            <h2>Sơ đồ các server</h2>
-            <div class="stats">
-                <div>Server online<br><b>3/3</b></div>
-                <div>Trạng thái<br><b id="sys-status">Đang hoạt động</b></div>
-            </div>
-            
-            <div class="ring-container">
-                <div class="center-circle">RING</div>
-                <div class="node node-top active" id="node-master">Dương</div>
-                <div class="node node-right" id="node-tram">Trâm</div>
-                <div class="node node-left" id="node-chung">Chung</div>
-            </div>
-
-            <div class="legend">
-                <span class="legend-item"><span class="box box-orange"></span> Server đang chọn</span>
-                <span class="legend-item"><span class="box box-green"></span> Đang hoạt động</span>
-            </div>
-        </div>
-
-        <div class="panel control-panel">
-            <h2>Điều khiển màn hình giám sát</h2>
-            <div class="controls">
-                <label>Chọn server:</label>
-                <select id="server-select" onchange="changeServerView()">
-                    <option value="Cloud-Server-Duong">Server Dương (Master)</option>
-                    <option value="Node-01-Tram">Server Trâm</option>
-                    <option value="Node-02-Chung">Server Chung</option>
-                </select>
-                <button class="btn-refresh" onclick="clearLogs()">Làm mới Dashboard</button>
-                <label><input type="checkbox" checked> Tự động cập nhật Real-time</label>
-            </div>
-
-            <h2 style="margin-top: 20px;">Log chi tiết theo server đang chọn</h2>
-            <div id="specific-log-display" class="log-box small-log"></div>
+    <div class="header">
+        <div class="logo">VIETSKY <span>Dashboard</span></div>
+        <div class="node-info">
+            Đang giám sát Cluster: <strong th:text="${serverId}">Server-Duong</strong>
         </div>
     </div>
 
-    <div class="bottom-section panel">
-        <h2>Dòng log tổng hợp của toàn hệ thống</h2>
-        <div id="global-log-display" class="log-box large-log"></div>
-    </div>
+    <div id="log-columns-container">
+        </div>
 
-    <script src="/js/logger.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    
+    <script>
+        const socket = new SockJS('/ws');
+        const stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function (frame) {
+            console.log('Connected: ' + frame);
+            stompClient.subscribe('/topic/logs/all', function (logOutput) {
+                const log = JSON.parse(logOutput.body);
+                displayLog(log);
+            });
+        });
+
+        function displayLog(log) {
+            const container = document.getElementById('log-columns-container');
+            let nodeCol = document.getElementById(`col-${log.nodeId}`);
+
+            if (!nodeCol) {
+                nodeCol = document.createElement('div');
+                nodeCol.id = `col-${log.nodeId}`;
+                nodeCol.className = 'log-column';
+                nodeCol.innerHTML = `
+                    <div class="node-header">
+                        <h3>Node: ${log.nodeId}</h3>
+                        <span class="status-indicator" id="status-${log.nodeId}">Online</span>
+                    </div>
+                    <div class="log-list" id="list-${log.nodeId}"></div>
+                `;
+                container.appendChild(nodeCol);
+            }
+
+            // Cập nhật trạng thái nếu có lỗi
+            const statusIndicator = document.getElementById(`status-${log.nodeId}`);
+            if (log.type === 'ERROR') {
+                statusIndicator.innerText = "Offline/Warning";
+                statusIndicator.style.background = "#4c0519";
+                statusIndicator.style.color = "#fb7185";
+            }
+
+            const logList = document.getElementById(`list-${log.nodeId}`);
+            const entry = document.createElement('div');
+            entry.className = `log-entry type-${log.type.toLowerCase()}`;
+            entry.innerHTML = `
+                <span class="clock">[T:${log.lamportClock}]</span>
+                <span>${log.message}</span>
+            `;
+
+            // Thêm vào đầu danh sách (mới nhất lên trên)
+            logList.insertBefore(entry, logList.firstChild);
+        }
+    </script>
 </body>
 </html>

@@ -34,15 +34,22 @@ public class BookingController {
     private final RestTemplate restTemplate = new RestTemplate();
 
     // Trong BookingController.java
+    // Trong BookingController.java
+
     private void sendToDashboard(String type, String message, int clock) {
         Map<String, Object> logData = new HashMap<>();
         logData.put("type", type);
         logData.put("message", message);
         logData.put("lamportClock", clock);
-        logData.put("nodeId", serverId); // "Cloud-Server-Duong", "Node-01-Tram", ...
+        logData.put("nodeId", serverId); // serverId lấy từ @Value("${server.id}")
+        logData.put("timestamp", System.currentTimeMillis());
 
-        // Gửi về một Topic chung để Dashboard của ông bắt được hết
+        // 1. Gửi vào Topic chung (Để xem toàn bộ Cluster)
         messagingTemplate.convertAndSend("/topic/logs/all", logData);
+
+        // 2. Gửi vào Topic riêng của Server này (Để xem riêng lẻ)
+        // Ví dụ: /topic/logs/Cloud-Server-Duong
+        messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
     }
 
     @PostMapping("/bookings")
