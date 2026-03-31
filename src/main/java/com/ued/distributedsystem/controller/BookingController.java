@@ -33,12 +33,16 @@ public class BookingController {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+    // Trong BookingController.java
     private void sendToDashboard(String type, String message, int clock) {
         Map<String, Object> logData = new HashMap<>();
         logData.put("type", type);
         logData.put("message", message);
         logData.put("lamportClock", clock);
-        messagingTemplate.convertAndSend("/topic/logs/" + serverId, logData);
+        logData.put("nodeId", serverId); // "Cloud-Server-Duong", "Node-01-Tram", ...
+
+        // Gửi về một Topic chung để Dashboard của ông bắt được hết
+        messagingTemplate.convertAndSend("/topic/logs/all", logData);
     }
 
     @PostMapping("/bookings")

@@ -1,27 +1,29 @@
 let stompClient = null;
 let currentSelectedServer = "Cloud-Server-Duong"; // Mặc định
 
+// Trong logger.js
 function connect() {
     const socket = new SockJS('/ws');
     stompClient = Stomp.over(socket);
-    stompClient.debug = null; // Tắt log rác trong console
+    stompClient.debug = null;
 
     stompClient.connect({}, function () {
-        // Lắng nghe TẤT CẢ log từ Backend bắn về topic này
-        stompClient.subscribe('/topic/logs/Cloud-Server-Duong', function (res) {
+        // Đăng ký nhận log tổng hợp từ tất cả các Server
+        stompClient.subscribe('/topic/logs/all', function (res) {
             const data = JSON.parse(res.body);
             const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
             
-            // Format log gộp thành 1 chuỗi dài giống hình 14d598.jpg: 
-            // [TIME] [NODE] Noi dung | Sequence=...
-            const logString = `[${time}] [${data.type}] [${data.nodeId || 'Master'}] ${data.message} | LamportClock=${data.lamportClock}`;
+            // Dữ liệu thật từ các máy sẽ có nodeId khác nhau
+            const logString = `[${time}] [${data.type}] [Node: ${data.nodeId}] ${data.message} | Clock: ${data.lamportClock}`;
 
-            // 1. Luôn in vào Dòng Log Tổng Hợp (Ô bự phía dưới)
+            // Hiện ở log tổng hợp (Dưới cùng)
             appendLog('global-log-display', logString);
 
-            // 2. Chỉ in vào Log Chi Tiết (Ô nhỏ góc phải) nếu khớp với lựa chọn Dropdown
-            if ((data.nodeId || 'Cloud-Server-Duong') === currentSelectedServer) {
+            // Hiện ở log chi tiết (Nếu đang chọn đúng server đó trên Dropdown)
+            if (data.nodeId === currentSelectedServer) {
                 appendLog('specific-log-display', logString);
+                // Làm nhấp nháy đèn trên sơ đồ vòng
+                triggerNodeAnimation(data.nodeId);
             }
         });
     });
@@ -55,6 +57,4 @@ function clearLogs() {
     document.getElementById('global-log-display').innerHTML = '';
 }
 
-document.addEventListener('DOMContentLoaded', connect);git add .
-git commit -m "cap nhat"
-git push origin main
+document.addEventListener('DOMContentLoaded', connect);
